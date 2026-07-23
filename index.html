@@ -89,6 +89,20 @@
   .result-note { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
   .result-row { margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-dim); background: var(--panel-raised); border-radius: 6px; padding: 10px 12px; white-space: pre-wrap; display: none; }
   .result-row.show { display: block; }
+
+  /* Telemetry section columns */
+  .tel-grid { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .tel-section { flex: 1; min-width: 120px; background: var(--panel-raised); border-radius: 6px; padding: 8px 10px; border: 1px solid var(--border); }
+  .tel-section-name { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--amber); margin-bottom: 6px; font-weight: 600; }
+  .tel-field { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; margin-bottom: 3px; }
+  .tel-field:last-child { margin-bottom: 0; }
+  .tel-field-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+  .tel-field-value { font-size: 12px; color: var(--text); font-weight: 500; text-align: right; }
+  .tel-vpn { display: flex; align-items: center; gap: 6px; margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border); }
+  .tel-vpn-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .tel-vpn-dot.done { background: var(--success); box-shadow: 0 0 5px var(--success); }
+  .tel-vpn-dot.pending { background: var(--danger); }
+  .tel-vpn-label { font-size: 11px; color: var(--text-dim); }
   .empty-state { text-align: center; padding: 60px 20px; color: var(--text-faint); font-size: 14px; }
   footer { margin-top: 40px; font-size: 12px; color: var(--text-faint); text-align: center; }
 </style>
@@ -131,7 +145,7 @@
   <div class="results" id="results"></div>
   <div class="empty-state" id="emptyState">Sign in and load sheets, then enter a system number to check status.</div>
 
-  <footer>4 stages active · Module QC and Telemetry QC will be wired in when sheets are ready.</footer>
+  <footer>5 stages active · Module QC will be wired in when the sheet is ready.</footer>
 </div>
 
 <!-- Google Identity Services -->
@@ -163,7 +177,7 @@ const STAGES = [
     matchColumnIndex: 2,
     displayFields: [{ label: 'Tester', index: 1 }]
   },
-  { id: 'telemetry', label: 'Telemetry QC',      tag: 'PWI0011/39', fileId: null },
+  { id: 'telemetry', label: 'Telemetry QC', tag: 'PWI0011/39', fileId: '1Q6ol_WiF_x9nND5odr3EQ4KIVp41V-CYJ0oS0HeSLP4', sheetName: 'Sheet1', mode: 'telemetry' },
   {
     id: 'packaging',  label: 'Final Packaging',  tag: 'PWI0069',
     fileId: '1hEoGdyz6yAzRAjx8u-B7cW_KQeD6XgQhie2_20sUknQ', sheetName: 'Sheet1',
@@ -340,6 +354,31 @@ function cellMatches(rawValue, targetDigits, excludeOldScheme) {
   return s.split(',').some(p => tokenMatches(p, targetDigits, excludeOldScheme));
 }
 
+function aggregateTelemetryStages(rows, targetDigits) {
+  const SECTIONS = [
+    { name: 'WiFi',      sysCol: 1,  influxCol: 3,  finalCol: 4,  vpnCol: 5  },
+    { name: 'OBT',       sysCol: 7,  influxCol: 9,  finalCol: 10, vpnCol: 11 },
+    { name: 'Cloudlink', sysCol: 13, influxCol: 15, finalCol: 16, vpnCol: 17 },
+  ];
+  const found = {};
+  for (let i = 2; i < rows.length; i++) {
+    for (const sec of SECTIONS) {
+      const raw = rows[i][sec.sysCol];
+      if (raw === null || raw === undefined || String(raw).trim() === '') continue;
+      const s = String(raw).trim().replace(/^sys/i, '').replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+      if (s !== targetDigits) continue;
+      const influx  = rows[i][sec.influxCol];
+      const finalQC = rows[i][sec.finalCol];
+      const vpnDate = rows[i][sec.vpnCol];
+      const hasDate = vpnDate !== null && vpnDate !== undefined && String(vpnDate).trim() !== '';
+      if (!found[sec.name] || (!found[sec.name].hasDate && hasDate)) {
+        found[sec.name] = { influx: influx ? String(influx).trim() : '—', finalQC: finalQC ? String(finalQC).trim() : '—', vpnDate: vpnDate ? String(vpnDate).trim() : '—', hasDate };
+      }
+    }
+  }
+  return found;
+}
+
 function aggregatePackagingStages(rows, targetDigits) {
   const stageMap = {};
   let anyMatch = false;
@@ -382,6 +421,43 @@ async function checkStage(stage, serial) {
     if (!rows || rows.length < 2) throw new Error('Sheet appears empty.');
 
     const target = normalizeTarget(serial);
+
+    if (stage.mode === 'telemetry') {
+      const found = aggregateTelemetryStages(rows, target);
+      const sections = Object.keys(found);
+      if (sections.length === 0) {
+        setStageUI(stage.id, 'fail', 'Missing', `System ${serial} not found in any Telemetry section (${rows.length - 2} rows scanned).`, null);
+        return;
+      }
+      const incomplete = sections.filter(s => !found[s].hasDate);
+      const state = incomplete.length > 0 ? 'fail' : 'pass';
+      const statusText = incomplete.length > 0 ? `VPN pending (${incomplete.join(', ')})` : 'Submitted';
+      const gridHTML = `<div class="tel-grid">${sections.map(s => {
+        const d = found[s];
+        return `<div class="tel-section">
+          <div class="tel-section-name">${s}</div>
+          <div class="tel-field"><span class="tel-field-label">Influx QC</span><span class="tel-field-value">${d.influx}</span></div>
+          <div class="tel-field"><span class="tel-field-label">Final QC</span><span class="tel-field-value">${d.finalQC}</span></div>
+          <div class="tel-vpn">
+            <span class="tel-vpn-dot ${d.hasDate ? 'done' : 'pending'}"></span>
+            <span class="tel-vpn-label">VPN ${d.hasDate ? 'Complete' : 'Pending'}</span>
+          </div>
+        </div>`;
+      }).join('')}</div>`;
+      document.getElementById(`num-${stage.id}`).className = 'stage-num ' + state;
+      const card = document.getElementById(`card-${stage.id}`);
+      card.className = 'result-card show ' + state;
+      const statusEl = document.getElementById(`status-${stage.id}`);
+      statusEl.className = 'result-status ' + state;
+      statusEl.textContent = statusText;
+      document.getElementById(`note-${stage.id}`).textContent = `Found in: ${sections.join(', ')}`;
+      const rowEl = document.getElementById(`row-${stage.id}`);
+      rowEl.innerHTML = gridHTML;
+      rowEl.style.background = 'none';
+      rowEl.style.padding = '0';
+      rowEl.classList.add('show');
+      return;
+    }
 
     if (stage.mode === 'packaging') {
       const { anyMatch, stageMap } = aggregatePackagingStages(rows, target);
