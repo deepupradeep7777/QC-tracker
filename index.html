@@ -251,13 +251,22 @@ function setCacheUI(state, text) {
 async function fetchSheetRows(fileId, sheetName) {
   const range = encodeURIComponent(sheetName + '!A1:Z');
   const url = `${SHEETS_API}/${fileId}/values/${range}`;
-  const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
-  if (!resp.ok) {
-    const err = await resp.text();
-    throw new Error(`Sheets API ${resp.status} for ${fileId}: ${err.slice(0, 200)}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const resp = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken }, signal: controller.signal });
+    clearTimeout(timeout);
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error(`Sheets API ${resp.status}: ${err.slice(0, 200)}`);
+    }
+    const data = await resp.json();
+    return data.values || [];
+  } catch(e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') throw new Error(`Timed out loading "${sheetName}" after 30s`);
+    throw e;
   }
-  const data = await resp.json();
-  return data.values || [];
 }
 
 async function loadAllSheets() {
@@ -278,12 +287,17 @@ async function loadAllSheets() {
 
   for (const { fileId, sheetName } of unique) {
     const key = fileId + '::' + sheetName;
+    setCacheUI('loading', `Loading ${sheetName} (${loaded + 1}/${unique.length})...`);
     try {
       const rows = await fetchSheetRows(fileId, sheetName);
       sheetCache[key] = rows;
       loaded++;
-      setCacheUI('loading', `Loaded ${loaded}/${unique.length}...`);
-    } catch(e) { failed++; console.error('[load]', key, e.message); }
+    } catch(e) { 
+      failed++; 
+      console.error('[load]', key, e.message);
+      setCacheUI('loading', `Failed: ${sheetName} — ${e.message.slice(0,60)}. Continuing...`);
+      await new Promise(r => setTimeout(r, 1000));
+    }
   }
 
   cacheLoadedAt = new Date();
