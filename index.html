@@ -157,7 +157,7 @@ const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly https:/
 const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 const STAGES = [
-  { id: 'module', label: 'Module QC', tag: 'PWI0005/6/7', fileId: '1qii-StLhMPAmXcaD0bjKjPAJYNBVxxmubMDoUww-eW0', sheetName: 'QC Passed', mode: 'module', systestFileId: '1NGIsb9SbsgE7JlyZjvpa8iS9z20H1Wy4s7CgMvH1CtE', systestSheetName: 'Sheet1' },
+  { id: 'module', label: 'Module QC', tag: 'PWI0005/6/7', fileId: '1qii-StLhMPAmXcaD0bjKjPAJYNBVxxmubMDoUww-eW0', sheetName: 'QC Passed', colRange: 'A1:B', mode: 'module', systestFileId: '1NGIsb9SbsgE7JlyZjvpa8iS9z20H1Wy4s7CgMvH1CtE', systestSheetName: 'Sheet1' },
   {
     id: 'powershelf', label: 'Powershelf QC',    tag: 'PWI0031/32',
     fileId: '1z0g1mb6S7mjnvoi9gncOUe-HhunZgkpZI7vEO02Rpcc', sheetName: 'Powershelf',
@@ -248,8 +248,9 @@ function setCacheUI(state, text) {
   btn.textContent = state === 'loading' ? '⟳ Loading...' : '⟳ Refresh Sheets';
 }
 
-async function fetchSheetRows(fileId, sheetName) {
-  const range = encodeURIComponent(sheetName + '!A1:Z');
+async function fetchSheetRows(fileId, sheetName, colRange) {
+  const rangeStr = sheetName + '!' + (colRange || 'A1:Z');
+  const range = encodeURIComponent(rangeStr);
   const url = `${SHEETS_API}/${fileId}/values/${range}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
@@ -278,22 +279,22 @@ async function loadAllSheets() {
   let loaded = 0, failed = 0;
   // Collect all unique file+sheet combos needed (including systest for module stage)
   const toLoad = [];
-  for (const stage of active) {
-    toLoad.push({ fileId: stage.fileId, sheetName: stage.sheetName || 'Sheet1' });
-    if (stage.systestFileId) toLoad.push({ fileId: stage.systestFileId, sheetName: stage.systestSheetName || 'Sheet1' });
+  for (const stage of activeStages) {
+    toLoad.push({ fileId: stage.fileId, sheetName: stage.sheetName || 'Sheet1', colRange: stage.colRange || null });
+    if (stage.systestFileId) toLoad.push({ fileId: stage.systestFileId, sheetName: stage.systestSheetName || 'Sheet1', colRange: null });
   }
   const unique = toLoad.filter((v, i, a) => a.findIndex(x => x.fileId === v.fileId && x.sheetName === v.sheetName) === i);
   setCacheUI('loading', `Loading ${unique.length} sheets...`);
 
-  for (const { fileId, sheetName } of unique) {
+  for (const { fileId, sheetName, colRange } of unique) {
     const key = fileId + '::' + sheetName;
     setCacheUI('loading', `Loading ${sheetName} (${loaded + 1}/${unique.length})...`);
     try {
-      const rows = await fetchSheetRows(fileId, sheetName);
+      const rows = await fetchSheetRows(fileId, sheetName, colRange);
       sheetCache[key] = rows;
       loaded++;
-    } catch(e) { 
-      failed++; 
+    } catch(e) {
+      failed++;
       console.error('[load]', key, e.message);
       setCacheUI('loading', `Failed: ${sheetName} — ${e.message.slice(0,60)}. Continuing...`);
       await new Promise(r => setTimeout(r, 1000));
