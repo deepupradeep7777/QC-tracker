@@ -105,6 +105,65 @@
   .tel-vpn-label { font-size: 11px; color: var(--text-dim); }
   .empty-state { text-align: center; padding: 60px 20px; color: var(--text-faint); font-size: 14px; }
   footer { margin-top: 40px; font-size: 12px; color: var(--text-faint); text-align: center; }
+
+  /* View toggle */
+  .view-toggle { display: flex; gap: 8px; margin-bottom: 20px; }
+  .view-btn { padding: 8px 18px; border-radius: 6px; border: 1px solid var(--border-strong); background: transparent; color: var(--text-dim); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+  .view-btn.active { background: var(--amber); color: #1a1400; border-color: var(--amber); font-weight: 600; }
+  .view-btn:hover:not(.active) { border-color: var(--amber); color: var(--amber); }
+
+  /* Panels */
+  .batch-panel { display: none; }
+  .batch-panel.show { display: block; }
+  .single-panel.hide { display: none; }
+
+  /* Batch input */
+  .batch-input-area { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 20px; }
+  .batch-input-area label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 8px; }
+  .batch-input-area textarea { width: 100%; background: var(--panel-raised); border: 1px solid var(--border-strong); border-radius: 6px; padding: 12px 14px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px; outline: none; resize: vertical; min-height: 90px; }
+  .batch-input-area textarea:focus { border-color: var(--blue); }
+  .batch-actions { display: flex; gap: 10px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+  .batch-run-btn { background: var(--amber); color: #1a1400; border: none; border-radius: 6px; padding: 10px 22px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; }
+  .batch-run-btn:disabled { opacity: 0.5; cursor: default; }
+  .batch-run-btn:hover:not(:disabled) { background: #ffbb1a; }
+  .batch-progress { font-size: 13px; color: var(--text-dim); }
+
+  /* Export */
+  .export-wrap { position: relative; margin-left: auto; }
+  .export-btn { background: transparent; border: 1px solid var(--border-strong); border-radius: 6px; color: var(--text-dim); padding: 8px 14px; font-size: 13px; font-family: 'Inter', sans-serif; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .export-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .export-dropdown { position: absolute; right: 0; top: calc(100% + 6px); background: var(--panel-raised); border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; z-index: 100; display: none; min-width: 140px; }
+  .export-dropdown.show { display: block; }
+  .export-option { padding: 10px 16px; font-size: 13px; color: var(--text-dim); cursor: pointer; transition: background 0.15s; }
+  .export-option:hover { background: var(--border); color: var(--text); }
+
+  /* Batch table */
+  .batch-table-wrap { overflow-x: auto; }
+  .batch-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .batch-table th { background: var(--panel); color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; padding: 10px 12px; text-align: center; border-bottom: 1px solid var(--border); white-space: nowrap; font-family: 'JetBrains Mono', monospace; }
+  .batch-table th.sys-col { text-align: left; }
+  .batch-table td { padding: 8px 12px; text-align: center; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .batch-table td.sys-col { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--text); }
+  .batch-table tr:last-child td { border-bottom: none; }
+  .batch-table tr:hover td { background: var(--panel-raised); }
+
+  /* Stage dot */
+  .bdot-wrap { position: relative; display: inline-block; }
+  .bdot { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; font-family: 'JetBrains Mono', monospace; cursor: default; border: 2px solid transparent; transition: transform 0.15s; }
+  .bdot:hover { transform: scale(1.15); }
+  .bdot.pass { background: var(--success-dim); border-color: var(--success); color: var(--success); }
+  .bdot.fail { background: var(--danger-dim); border-color: var(--danger); color: var(--danger); }
+  .bdot.warn { background: var(--amber-dim); border-color: var(--amber); color: var(--amber); }
+  .bdot.pending { background: var(--panel-raised); border-color: var(--grey); color: var(--text-faint); }
+
+  /* Tooltip */
+  .bdot-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: var(--panel-raised); border: 1px solid var(--border-strong); border-radius: 6px; padding: 8px 10px; font-size: 11px; color: var(--text-dim); white-space: pre; z-index: 200; pointer-events: none; opacity: 0; transition: opacity 0.15s; min-width: 130px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; }
+  .bdot-wrap:hover .bdot-tip { opacity: 1; }
+
+  /* Summary bar */
+  .batch-summary { margin-top: 14px; font-size: 13px; color: var(--text-dim); display: flex; gap: 20px; flex-wrap: wrap; }
+  .batch-summary span { display: flex; align-items: center; gap: 6px; }
+  .sum-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 </style>
 </head>
 <body>
@@ -132,18 +191,45 @@
     <button class="refresh-btn" id="refreshBtn" onclick="loadAllSheets()" disabled>⟳ Load Sheets</button>
   </div>
 
-  <div class="search-console">
-    <input type="text" id="serialInput" placeholder="e.g. 13554" autocomplete="off">
-    <button id="searchBtn" onclick="runSearch()" disabled>Check status</button>
+  <!-- View Toggle -->
+  <div class="view-toggle">
+    <button class="view-btn active" id="btnSingle" onclick="switchView('single')">⊙ Single Check</button>
+    <button class="view-btn" id="btnBatch" onclick="switchView('batch')">⊞ Batch Check</button>
   </div>
 
-  <div class="line-wrap">
-    <div class="line-track"></div>
-    <div class="stages" id="stages"></div>
+  <!-- Single View -->
+  <div class="single-panel" id="singlePanel">
+    <div class="search-console">
+      <input type="text" id="serialInput" placeholder="e.g. 13554" autocomplete="off">
+      <button id="searchBtn" onclick="runSearch()" disabled>Check status</button>
+    </div>
+    <div class="line-wrap">
+      <div class="line-track"></div>
+      <div class="stages" id="stages"></div>
+    </div>
+    <div class="results" id="results"></div>
+    <div class="empty-state" id="emptyState">Sign in and load sheets, then enter a system number to check status.</div>
   </div>
 
-  <div class="results" id="results"></div>
-  <div class="empty-state" id="emptyState">Sign in and load sheets, then enter a system number to check status.</div>
+  <!-- Batch View -->
+  <div class="batch-panel" id="batchPanel">
+    <div class="batch-input-area">
+      <label>Paste system numbers — comma separated, one per line, or ranges (e.g. 13554-13557)</label>
+      <textarea id="batchInput" placeholder="13554, 13555&#10;13556-13558&#10;13560"></textarea>
+      <div class="batch-actions">
+        <button class="batch-run-btn" id="batchRunBtn" onclick="runBatch()" disabled>Run Batch Check</button>
+        <span class="batch-progress" id="batchProgress"></span>
+        <div class="export-wrap" id="exportWrap" style="display:none;">
+          <button class="export-btn" onclick="toggleExportMenu()">↓ Export ▾</button>
+          <div class="export-dropdown" id="exportDropdown">
+            <div class="export-option" onclick="exportExcel()">📊 Download Excel</div>
+            <div class="export-option" onclick="exportPDF()">📄 Download PDF</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="batchTableWrap"></div>
+  </div>
 
   <footer>All 6 stages active · Battery QC Tracker · Stromcore</footer>
 </div>
@@ -185,7 +271,232 @@ const STAGES = [
   },
 ];
 
-// ─── AUTH STATE ──────────────────────────────────────────────────────────────
+// ─── VIEW TOGGLE ─────────────────────────────────────────────────────────────
+function switchView(view) {
+  const single = document.getElementById('singlePanel');
+  const batch  = document.getElementById('batchPanel');
+  document.getElementById('btnSingle').classList.toggle('active', view === 'single');
+  document.getElementById('btnBatch').classList.toggle('active', view === 'batch');
+  single.classList.toggle('hide', view === 'batch');
+  batch.classList.toggle('show', view === 'batch');
+  if (view === 'batch' && cacheLoadedAt) document.getElementById('batchRunBtn').disabled = false;
+}
+
+// ─── SERIAL PARSER ───────────────────────────────────────────────────────────
+function parseSerials(raw) {
+  const serials = new Set();
+  // Normalize: replace newlines with commas, then split on commas/spaces
+  const tokens = raw.replace(/\n/g, ',').split(/[,\s]+/).map(t => t.trim()).filter(Boolean);
+  for (const token of tokens) {
+    const range = token.match(/^(\d{5})-(\d{5})$/);
+    if (range) {
+      const lo = parseInt(range[1], 10), hi = parseInt(range[2], 10);
+      for (let n = lo; n <= hi; n++) serials.add(String(n));
+    } else if (/^\d{5}$/.test(token)) {
+      serials.add(token);
+    }
+  }
+  return [...serials].sort((a, b) => parseInt(a) - parseInt(b));
+}
+
+// ─── BATCH STAGE CHECK ───────────────────────────────────────────────────────
+// Returns { state: 'pass'|'fail'|'warn'|'pending', tip: string }
+async function checkStageForBatch(stage, serial) {
+  if (!stage.fileId) return { state: 'pending', tip: 'Not connected' };
+  try {
+    const key = stage.fileId + '::' + (stage.sheetName || 'Sheet1');
+    const rows = sheetCache[key];
+    if (!rows || rows.length < 2) return { state: 'fail', tip: 'Sheet not loaded' };
+    const target = normalizeTarget(serial);
+
+    if (stage.mode === 'module') {
+      const moduleKey   = stage.fileId + '::' + (stage.sheetName || 'Sheet1');
+      const systestKey  = stage.systestFileId + '::' + (stage.systestSheetName || 'Sheet1');
+      const moduleRows  = sheetCache[moduleKey];
+      const systestRows = sheetCache[systestKey];
+      if (!moduleRows || !systestRows) return { state: 'fail', tip: 'Sheet not loaded' };
+      const { found, modules } = aggregateModuleQC(systestRows, moduleRows, target);
+      if (!found) return { state: 'fail', tip: 'Not in System Testing' };
+      const missing = modules.filter(m => !m.passed);
+      const tip = modules.map(m => `${m.position}. ${m.moduleId} ${m.passed ? '✓' : '✗'}`).join('\n');
+      return { state: missing.length === 0 ? 'pass' : 'fail', tip };
+    }
+
+    if (stage.mode === 'telemetry') {
+      const found = aggregateTelemetryStages(rows, target);
+      const sections = Object.keys(found);
+      if (sections.length === 0) return { state: 'fail', tip: 'Not found' };
+      const incomplete = sections.filter(s => !found[s].hasDate);
+      const tip = sections.map(s => `${s}: VPN ${found[s].hasDate ? '✓' : '✗'}`).join('\n');
+      return { state: incomplete.length > 0 ? 'fail' : 'pass', tip };
+    }
+
+    if (stage.mode === 'packaging') {
+      const { anyMatch, stageMap } = aggregatePackagingStages(rows, target);
+      if (!anyMatch) return { state: 'fail', tip: 'Not found' };
+      const req = ['1','2','3'], missing = req.filter(n => !stageMap[n]);
+      const tip = req.map(n => `Stage ${n}: ${stageMap[n] ? stageMap[n].personnel : '✗'}`).join('\n');
+      return { state: missing.length > 0 ? 'fail' : 'pass', tip };
+    }
+
+    // Standard single-row match
+    for (let i = 1; i < rows.length; i++) {
+      if (cellMatches(rows[i][stage.matchColumnIndex], target, stage.excludeOldScheme)) {
+        const tip = (stage.displayFields || []).map(f => `${f.label}: ${rows[i][f.index] ?? '—'}`).join('\n') || 'Found';
+        return { state: 'pass', tip };
+      }
+    }
+    return { state: 'fail', tip: 'Not found' };
+  } catch(e) {
+    return { state: 'fail', tip: 'Error: ' + e.message.slice(0, 40) };
+  }
+}
+
+// ─── BATCH RUNNER ────────────────────────────────────────────────────────────
+let batchResults = []; // store for export
+
+async function runBatch() {
+  if (!cacheLoadedAt) return;
+  const raw = document.getElementById('batchInput').value;
+  const serials = parseSerials(raw);
+  if (serials.length === 0) { document.getElementById('batchProgress').textContent = 'No valid 5-digit system numbers found.'; return; }
+
+  document.getElementById('batchRunBtn').disabled = true;
+  document.getElementById('exportWrap').style.display = 'none';
+  document.getElementById('batchTableWrap').innerHTML = '';
+  batchResults = [];
+
+  const activeStages = STAGES.filter(s => s.fileId);
+  let done = 0;
+  const prog = document.getElementById('batchProgress');
+
+  for (const serial of serials) {
+    prog.textContent = `Checking ${serial}... (${++done}/${serials.length})`;
+    const stageResults = {};
+    for (const stage of activeStages) {
+      stageResults[stage.id] = await checkStageForBatch(stage, serial);
+    }
+    batchResults.push({ serial, stageResults });
+    renderBatchTable(batchResults, activeStages);
+  }
+
+  prog.textContent = `Done — ${serials.length} unit(s) checked.`;
+  document.getElementById('batchRunBtn').disabled = false;
+  document.getElementById('exportWrap').style.display = 'flex';
+}
+
+// ─── TABLE RENDERER ──────────────────────────────────────────────────────────
+function renderBatchTable(results, activeStages) {
+  const wrap = document.getElementById('batchTableWrap');
+  const stageLabels = { module: 'MOD', powershelf: 'PS', closeup: 'CU', systest: 'ST', telemetry: 'TEL', packaging: 'PKG' };
+
+  const thead = `<tr>
+    <th class="sys-col">System #</th>
+    ${activeStages.map(s => `<th title="${s.label}">${stageLabels[s.id] || s.id.toUpperCase()}</th>`).join('')}
+    <th>Status</th>
+  </tr>`;
+
+  const tbody = results.map(({ serial, stageResults }) => {
+    const allPass = activeStages.every(s => stageResults[s.id]?.state === 'pass');
+    const anyFail = activeStages.some(s => stageResults[s.id]?.state === 'fail');
+    const overallState = allPass ? 'pass' : anyFail ? 'fail' : 'warn';
+    const overallLabel = allPass ? '✓ Ready' : anyFail ? '✗ Hold' : '~ Review';
+    const overallColor = allPass ? 'var(--success)' : anyFail ? 'var(--danger)' : 'var(--amber)';
+    const dots = activeStages.map(s => {
+      const r = stageResults[s.id] || { state: 'pending', tip: 'Not checked' };
+      const icon = r.state === 'pass' ? '✓' : r.state === 'fail' ? '✗' : r.state === 'warn' ? '~' : '·';
+      return `<td><div class="bdot-wrap"><div class="bdot ${r.state}">${icon}</div><div class="bdot-tip">${s.label}\n${r.tip}</div></div></td>`;
+    }).join('');
+    return `<tr>
+      <td class="sys-col">${serial}</td>
+      ${dots}
+      <td style="font-weight:600;color:${overallColor};font-size:12px;white-space:nowrap;">${overallLabel}</td>
+    </tr>`;
+  }).join('');
+
+  // Summary
+  const passCount = results.filter(r => STAGES.filter(s=>s.fileId).every(s => r.stageResults[s.id]?.state === 'pass')).length;
+  const failCount = results.filter(r => STAGES.filter(s=>s.fileId).some(s => r.stageResults[s.id]?.state === 'fail')).length;
+  const pendingCount = results.length - passCount - failCount;
+
+  wrap.innerHTML = `
+    <div class="batch-table-wrap">
+      <table class="batch-table"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+    </div>
+    <div class="batch-summary">
+      <span><span class="sum-dot" style="background:var(--success)"></span>${passCount} Ready to ship</span>
+      <span><span class="sum-dot" style="background:var(--danger)"></span>${failCount} On hold</span>
+      ${pendingCount > 0 ? `<span><span class="sum-dot" style="background:var(--amber)"></span>${pendingCount} Review needed</span>` : ''}
+    </div>`;
+}
+
+// ─── EXPORT ──────────────────────────────────────────────────────────────────
+function toggleExportMenu() {
+  document.getElementById('exportDropdown').classList.toggle('show');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.export-wrap')) document.getElementById('exportDropdown')?.classList.remove('show');
+});
+
+function exportExcel() {
+  document.getElementById('exportDropdown').classList.remove('show');
+  const activeStages = STAGES.filter(s => s.fileId);
+  const header = ['System #', ...activeStages.map(s => s.label), 'Status'];
+  const rows = batchResults.map(({ serial, stageResults }) => {
+    const allPass = activeStages.every(s => stageResults[s.id]?.state === 'pass');
+    const anyFail = activeStages.some(s => stageResults[s.id]?.state === 'fail');
+    return [serial, ...activeStages.map(s => {
+      const r = stageResults[s.id];
+      return r?.state === 'pass' ? 'PASS' : r?.state === 'fail' ? 'FAIL' : r?.state === 'warn' ? 'WARN' : '—';
+    }), allPass ? 'Ready' : anyFail ? 'Hold' : 'Review'];
+  });
+  const csv = [header, ...rows].map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `QC_Batch_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function exportPDF() {
+  document.getElementById('exportDropdown').classList.remove('show');
+  const printWin = window.open('', '_blank');
+  const activeStages = STAGES.filter(s => s.fileId);
+  const stageLabels = { module: 'MOD', powershelf: 'PS', closeup: 'CU', systest: 'ST', telemetry: 'TEL', packaging: 'PKG' };
+  const thead = `<tr style="background:#f5f5f5">
+    <th style="text-align:left;padding:8px 10px;border:1px solid #ddd">System #</th>
+    ${activeStages.map(s => `<th style="padding:8px 10px;border:1px solid #ddd">${stageLabels[s.id]||s.id}</th>`).join('')}
+    <th style="padding:8px 10px;border:1px solid #ddd">Status</th>
+  </tr>`;
+  const tbody = batchResults.map(({ serial, stageResults }) => {
+    const allPass = activeStages.every(s => stageResults[s.id]?.state === 'pass');
+    const anyFail = activeStages.some(s => stageResults[s.id]?.state === 'fail');
+    const status = allPass ? 'Ready' : anyFail ? 'HOLD' : 'Review';
+    const color  = allPass ? '#166534' : anyFail ? '#991b1b' : '#92400e';
+    const cells = activeStages.map(s => {
+      const r = stageResults[s.id];
+      const val = r?.state === 'pass' ? '✓' : r?.state === 'fail' ? '✗' : '~';
+      const c   = r?.state === 'pass' ? '#166534' : r?.state === 'fail' ? '#991b1b' : '#92400e';
+      return `<td style="text-align:center;padding:6px 10px;border:1px solid #ddd;color:${c};font-weight:700">${val}</td>`;
+    }).join('');
+    return `<tr><td style="padding:6px 10px;border:1px solid #ddd;font-weight:600">${serial}</td>${cells}<td style="padding:6px 10px;border:1px solid #ddd;color:${color};font-weight:700;text-align:center">${status}</td></tr>`;
+  }).join('');
+  printWin.document.write(`<!DOCTYPE html><html><head><title>QC Batch Report</title></head><body style="font-family:Arial,sans-serif;padding:30px">
+    <h2 style="margin:0 0 4px">Battery QC Batch Report</h2>
+    <p style="color:#666;margin:0 0 20px;font-size:13px">Generated: ${new Date().toLocaleString()} · ${batchResults.length} units</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+  </body></html>`);
+  printWin.document.close();
+  printWin.print();
+}
+
+// Enable batch run button when sheets load
+const _origSetCacheUI = setCacheUI;
+function setCacheUI(state, text) {
+  _origSetCacheUI(state, text);
+  if (state === 'ready') document.getElementById('batchRunBtn').disabled = false;
+}
+
+// ─── VIEW TOGGLE ─────────────────────────────────────────────────────────────
 let accessToken = null;
 let tokenClient = null;
 let cacheLoadedAt = null;
