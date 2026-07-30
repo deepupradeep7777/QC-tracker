@@ -145,7 +145,7 @@
   <div class="results" id="results"></div>
   <div class="empty-state" id="emptyState">Sign in and load sheets, then enter a system number to check status.</div>
 
-  <footer>5 stages active · Module QC will be wired in when the sheet is ready.</footer>
+  <footer>All 6 stages active · Battery QC Tracker · Stromcore</footer>
 </div>
 
 <!-- Google Identity Services -->
@@ -157,7 +157,7 @@ const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly https:/
 const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 const STAGES = [
-  { id: 'module',     label: 'Module QC',       tag: 'PWI0005/6/7', fileId: null },
+  { id: 'module', label: 'Module QC', tag: 'PWI0005/6/7', fileId: '1qii-StLhMPAmXcaD0bjKjPAJYNBVxxmubMDoUww-eW0', sheetName: 'QC Passed', mode: 'module', systestFileId: '1NGIsb9SbsgE7JlyZjvpa8iS9z20H1Wy4s7CgMvH1CtE', systestSheetName: 'Sheet1' },
   {
     id: 'powershelf', label: 'Powershelf QC',    tag: 'PWI0031/32',
     fileId: '1z0g1mb6S7mjnvoi9gncOUe-HhunZgkpZI7vEO02Rpcc', sheetName: 'Powershelf',
@@ -267,17 +267,23 @@ async function loadAllSheets() {
   document.getElementById('searchBtn').disabled = true;
 
   let loaded = 0, failed = 0;
-  for (const stage of activeStages) {
-    const key = stage.fileId + '::' + (stage.sheetName || 'Sheet1');
+  // Collect all unique file+sheet combos needed (including systest for module stage)
+  const toLoad = [];
+  for (const stage of active) {
+    toLoad.push({ fileId: stage.fileId, sheetName: stage.sheetName || 'Sheet1' });
+    if (stage.systestFileId) toLoad.push({ fileId: stage.systestFileId, sheetName: stage.systestSheetName || 'Sheet1' });
+  }
+  const unique = toLoad.filter((v, i, a) => a.findIndex(x => x.fileId === v.fileId && x.sheetName === v.sheetName) === i);
+  setCacheUI('loading', `Loading ${unique.length} sheets...`);
+
+  for (const { fileId, sheetName } of unique) {
+    const key = fileId + '::' + sheetName;
     try {
-      const rows = await fetchSheetRows(stage.fileId, stage.sheetName || 'Sheet1');
+      const rows = await fetchSheetRows(fileId, sheetName);
       sheetCache[key] = rows;
       loaded++;
-      setCacheUI('loading', `Loaded ${loaded}/${activeStages.length}...`);
-    } catch (e) {
-      failed++;
-      console.error('[load]', key, e.message);
-    }
+      setCacheUI('loading', `Loaded ${loaded}/${unique.length}...`);
+    } catch(e) { failed++; console.error('[load]', key, e.message); }
   }
 
   cacheLoadedAt = new Date();
@@ -354,6 +360,52 @@ function cellMatches(rawValue, targetDigits, excludeOldScheme) {
   return s.split(',').some(p => tokenMatches(p, targetDigits, excludeOldScheme));
 }
 
+function parseModuleIdsFromCell(cellValue) {
+  // Format: "1 - 35060\n2 - 35059\n3 - 35048\n5 - 35051"
+  // Returns array of { position, moduleId }
+  if (!cellValue) return [];
+  return String(cellValue).split('\n')
+    .map(line => {
+      const m = line.trim().match(/^(\d+)\s*-\s*(\d+)/);
+      return m ? { position: m[1], moduleId: m[2] } : null;
+    })
+    .filter(Boolean);
+}
+
+function aggregateModuleQC(systestRows, moduleRows, targetDigits) {
+  // Step 1: find module IDs for this battery from System Testing (col index 2=SYS, 3=modules)
+  let moduleList = [];
+  for (let i = 1; i < systestRows.length; i++) {
+    const raw = systestRows[i][2];
+    if (!raw) continue;
+    const s = String(raw).trim().replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+    if (s !== targetDigits) continue;
+    moduleList = parseModuleIdsFromCell(systestRows[i][3]);
+    break;
+  }
+  if (moduleList.length === 0) return { found: false, modules: [] };
+
+  // Step 2: build lookup of QC Passed modules { moduleId -> qcName }
+  const passedMap = {};
+  for (let i = 1; i < moduleRows.length; i++) {
+    const id = moduleRows[i][0];
+    if (id === null || id === undefined) continue;
+    const idStr = String(id).replace('.0', '').trim();
+    const name = moduleRows[i][1] ? String(moduleRows[i][1]).trim() : '—';
+    passedMap[idStr] = name;
+  }
+
+  // Step 3: check each module
+  const modules = moduleList.map(({ position, moduleId }) => ({
+    position,
+    moduleId,
+    passed: !!passedMap[moduleId],
+    qcName: passedMap[moduleId] || '—'
+  }));
+
+  return { found: true, modules };
+}
+
 function aggregateTelemetryStages(rows, targetDigits) {
   const SECTIONS = [
     { name: 'WiFi',      sysCol: 1,  influxCol: 3,  finalCol: 4,  vpnCol: 5  },
@@ -421,6 +473,28 @@ async function checkStage(stage, serial) {
     if (!rows || rows.length < 2) throw new Error('Sheet appears empty.');
 
     const target = normalizeTarget(serial);
+
+    if (stage.mode === 'module') {
+      const moduleKey   = stage.fileId + '::' + (stage.sheetName || 'Sheet1');
+      const systestKey  = stage.systestFileId + '::' + (stage.systestSheetName || 'Sheet1');
+      const moduleRows  = sheetCache[moduleKey]  || await fetchSheetRows(stage.fileId, stage.sheetName || 'Sheet1').then(r => { sheetCache[moduleKey] = r; return r; });
+      const systestRows = sheetCache[systestKey] || await fetchSheetRows(stage.systestFileId, stage.systestSheetName || 'Sheet1').then(r => { sheetCache[systestKey] = r; return r; });
+
+      const { found, modules } = aggregateModuleQC(systestRows, moduleRows, target);
+      if (!found) {
+        setStageUI(stage.id, 'fail', 'Missing', `System ${serial} not found in System Testing — cannot determine module list.`, null);
+        return;
+      }
+
+      const missing = modules.filter(m => !m.passed);
+      const state = missing.length === 0 ? 'pass' : 'fail';
+      const statusText = missing.length === 0 ? 'All Passed' : `${missing.length} Missing`;
+      const summary = modules.map(m =>
+        `Pos ${m.position} · ${m.moduleId} · ${m.passed ? '✓ ' + m.qcName : '✗ Not in QC Passed'}`
+      ).join('\n');
+      setStageUI(stage.id, state, statusText, `${modules.length} module(s) checked`, summary);
+      return;
+    }
 
     if (stage.mode === 'telemetry') {
       const found = aggregateTelemetryStages(rows, target);
