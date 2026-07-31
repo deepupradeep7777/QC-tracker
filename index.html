@@ -244,6 +244,7 @@ const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 const STAGES = [
   { id: 'module', label: 'Module QC', tag: 'PWI0005/6/7', fileId: '1qii-StLhMPAmXcaD0bjKjPAJYNBVxxmubMDoUww-eW0', sheetName: 'QC Passed', colRange: 'A1:B', mode: 'module', systestFileId: '1NGIsb9SbsgE7JlyZjvpa8iS9z20H1Wy4s7CgMvH1CtE', systestSheetName: 'Sheet1' },
+  { id: 'weight', label: 'Weight Study', tag: 'QC-WT', fileId: '1DsO4ip2Lpi0mWuQpR2qScxNP9dB07c8n_HJQZhgSVoU', sheetName: 'Sheet1', colRange: 'A1:C', mode: 'weight', displayFields: [{ label: 'Location', index: 2 }] },
   {
     id: 'powershelf', label: 'Powershelf QC',    tag: 'PWI0031/32',
     fileId: '1z0g1mb6S7mjnvoi9gncOUe-HhunZgkpZI7vEO02Rpcc', sheetName: 'Powershelf',
@@ -331,6 +332,18 @@ async function checkStageForBatch(stage, serial) {
       return { state: incomplete.length > 0 ? 'fail' : 'pass', tip };
     }
 
+    if (stage.mode === 'weight') {
+      for (let i = 1; i < rows.length; i++) {
+        const raw = rows[i][0];
+        if (!raw) continue;
+        const s = String(raw).trim().match(/^(\d+)/);
+        if (!s || s[1] !== target) continue;
+        const location = rows[i][2] ? String(rows[i][2]).trim() : '—';
+        return { state: 'pass', tip: `Location: ${location}` };
+      }
+      return { state: 'fail', tip: 'Not found' };
+    }
+
     if (stage.mode === 'packaging') {
       const { anyMatch, stageMap } = aggregatePackagingStages(rows, target);
       if (!anyMatch) return { state: 'fail', tip: 'Not found' };
@@ -388,7 +401,7 @@ async function runBatch() {
 // ─── TABLE RENDERER ──────────────────────────────────────────────────────────
 function renderBatchTable(results, activeStages) {
   const wrap = document.getElementById('batchTableWrap');
-  const stageLabels = { module: 'MOD', powershelf: 'PS', closeup: 'CU', systest: 'ST', telemetry: 'TEL', packaging: 'PKG' };
+  const stageLabels = { module: 'MOD', powershelf: 'PS', closeup: 'CU', systest: 'ST', telemetry: 'TEL', packaging: 'PKG', weight: 'WT' };
 
   const thead = `<tr>
     <th class="sys-col">System #</th>
@@ -461,7 +474,7 @@ function exportPDF() {
   document.getElementById('exportDropdown').classList.remove('show');
   const printWin = window.open('', '_blank');
   const activeStages = STAGES.filter(s => s.fileId);
-  const stageLabels = { module: 'MOD', powershelf: 'PS', closeup: 'CU', systest: 'ST', telemetry: 'TEL', packaging: 'PKG' };
+  const stageLabels = { module: 'MOD', powershelf: 'PS', closeup: 'CU', systest: 'ST', telemetry: 'TEL', packaging: 'PKG', weight: 'WT' };
   const thead = `<tr style="background:#f5f5f5">
     <th style="text-align:left;padding:8px 10px;border:1px solid #ddd">System #</th>
     ${activeStages.map(s => `<th style="padding:8px 10px;border:1px solid #ddd">${stageLabels[s.id]||s.id}</th>`).join('')}
@@ -819,6 +832,21 @@ async function checkStage(stage, serial) {
         `Pos ${m.position} · ${m.moduleId} · ${m.passed ? '✓ ' + m.qcName : '✗ Not in QC Passed'}`
       ).join('\n');
       setStageUI(stage.id, state, statusText, `${modules.length} module(s) checked`, summary);
+      return;
+    }
+
+    if (stage.mode === 'weight') {
+      for (let i = 1; i < rows.length; i++) {
+        const raw = rows[i][0];
+        if (!raw) continue;
+        const s = String(raw).trim().match(/^(\d+)/);
+        if (!s) continue;
+        if (s[1] !== target) continue;
+        const location = rows[i][2] ? String(rows[i][2]).trim() : '—';
+        setStageUI(stage.id, 'pass', 'Submitted', `Location: ${location}`, null);
+        return;
+      }
+      setStageUI(stage.id, 'fail', 'Missing', `System ${serial} not found in Weight Study.`, null);
       return;
     }
 
