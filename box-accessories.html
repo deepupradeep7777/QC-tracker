@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Box Accessories Generator — Stromcore</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #14161a;
+    --panel: #1c1f24;
+    --line: #2d323a;
+    --amber: #ffc72c;
+    --amber-dim: #8a6d1a;
+    --text: #e9e7e1;
+    --text-dim: #9aa0a6;
+    --warn: #ff6b5e;
+    --font-display: 'Barlow Condensed', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--font-body); -webkit-font-smoothing:antialiased; }
+  .wrap{ max-width:820px; margin:0 auto; padding:28px 20px 60px; }
+
+  .rail{ display:flex; align-items:center; gap:10px; margin-bottom:22px; border-bottom:1px solid var(--line); padding-bottom:18px; }
+  .rail .mark{ width:38px; height:38px; border:2px solid var(--amber); border-radius:4px; display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; color:var(--amber); font-size:18px; transform:rotate(-6deg); flex-shrink:0; }
+  h1{ font-family:var(--font-display); font-weight:700; letter-spacing:0.5px; font-size:28px; margin:0; text-transform:uppercase; }
+  .rail .sub{ color:var(--text-dim); font-size:13px; margin-top:2px; }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:20px; }
+  .panel h2{ font-family:var(--font-display); text-transform:uppercase; letter-spacing:0.6px; font-size:16px; margin:0 0 12px; color:var(--amber); }
+
+  textarea{ width:100%; min-height:280px; resize:vertical; background:#101215; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:12px; font-family:var(--font-mono); font-size:12.5px; line-height:1.6; }
+  textarea:focus{ outline:none; border-color:var(--amber-dim); }
+
+  .row{ display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+  button{ font-family:var(--font-body); font-weight:600; font-size:13px; border-radius:6px; border:1px solid var(--line); background:#21252b; color:var(--text); padding:10px 16px; cursor:pointer; transition:all .15s ease; }
+  button:hover{ border-color:var(--amber-dim); }
+  button.primary{ background:var(--amber); color:#161616; border-color:var(--amber); }
+  button.primary:hover{ filter:brightness(1.08); }
+  button.ghost{ background:transparent; }
+  .hint{ color:var(--text-dim); font-size:12px; margin-top:8px; }
+
+  .meta{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px; flex-wrap:wrap; gap:6px;}
+  .meta .title{ font-family:var(--font-display); font-size:20px; text-transform:uppercase; }
+  .meta .stamp{ font-family:var(--font-mono); color:var(--text-dim); font-size:11px; }
+
+  .cat{ margin-bottom:18px; }
+  .cat h3{ font-family:var(--font-display); text-transform:uppercase; letter-spacing:0.5px; font-size:14px; color:var(--text-dim); margin:0 0 8px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .item{ display:flex; align-items:flex-start; gap:10px; padding:8px 6px; border-bottom:1px solid #22262b; }
+  .item:last-child{ border-bottom:none; }
+  .item .name{ font-weight:600; font-size:13.5px; }
+  .item .note{ font-size:12px; color:var(--text-dim); margin-top:2px; }
+  .item .note.flag{ color:var(--warn); }
+  .item.editing{ align-items:center; }
+  .item-edit-fields{ flex:1; display:flex; flex-direction:column; gap:4px; }
+  .item-edit-fields input{
+    width:100%; background:#101215; color:var(--text); border:1px solid var(--line); border-radius:4px;
+    padding:6px 8px; font-family:var(--font-body); font-size:13px;
+  }
+  .item-edit-fields input.note-input{ font-size:12px; color:var(--text-dim); }
+  .item-edit-fields input:focus{ outline:none; border-color:var(--amber-dim); }
+  button.small{ padding:5px 10px; font-size:12px; }
+  button.icon-x{ background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:15px; padding:4px 6px; flex-shrink:0; }
+  button.icon-x:hover{ color:var(--warn); }
+  .add-item-row{ margin-top:6px; }
+
+  .empty-state{ color:var(--text-dim); font-size:13px; padding:30px 10px; text-align:center; border:1px dashed var(--line); border-radius:8px; }
+
+  .sysnum-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap:8px; margin-bottom:20px; }
+  .sysnum{ display:flex; align-items:center; gap:8px; background:#191c20; border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+  .sysnum input[type=checkbox]{ width:16px; height:16px; accent-color:var(--amber); cursor:pointer; flex-shrink:0; }
+  .sysnum label{ font-family:var(--font-mono); font-size:13px; }
+
+  .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(8px); background:var(--amber); color:#161616; font-weight:600; font-size:13px; padding:10px 18px; border-radius:6px; opacity:0; pointer-events:none; transition:opacity .2s ease, transform .2s ease; z-index:999; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  @media print{
+    body{ background:#fff; color:#000; }
+    .rail, #inputPanel, #outputActions, .toast, .icon-x, .add-item-row, .item-edit-fields input.note-input::placeholder{ display:none !important; }
+    .wrap{ max-width:100%; padding:0; }
+    .panel{ background:#fff; border:none; padding:0; }
+    .panel h2{ display:none; }
+    .meta .title{ color:#000; }
+    .meta .stamp{ color:#333; }
+    .sysnum{ background:#fff; border:1px solid #999; }
+    .cat h3{ color:#000; border-bottom:1px solid #999; }
+    .item{ border-bottom:1px solid #ccc; }
+    .item .note{ color:#333; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="rail">
+    <div class="mark">SC</div>
+    <div>
+      <h1>Box Accessories Generator</h1>
+      <div class="sub">Paste the battery info → get the packing list of items that ship with that unit</div>
+    </div>
+  </div>
+
+  <div class="panel" id="inputPanel">
+    <h2>Battery Info</h2>
+    <textarea id="specInput" placeholder="Client: Ben E Keith
+Customer Site: Ben E Keith TX
+ID#s: 13521-13532
+Model: 36V-700Ah-38-20-30-H
+Powershelf: 2C Single Schaltbau (Middle Port)
+Enclosure: 2C
+Module: 36V
+Heater: Yes
+Hyg / Crown: HYG
+Charge Rate: 400A
+Telemetry: OBT, Cloudlink Modem
+Screen: Yes
+Discharge Jumpers: 4ft 3/0 SB Grey to SB Grey
+Charge Jumpers: n/a
+UL: No"></textarea>
+    <div class="row">
+      <button class="primary" id="generateBtn">Generate</button>
+      <button class="ghost" id="clearBtn">Clear</button>
+    </div>
+    <div class="hint">Rules implemented so far: Screen, Charge/Discharge Jumper, Telemetry/OBT/Cloudlink, HYG harness.</div>
+  </div>
+
+  <div class="panel">
+    <h2>Packing List</h2>
+    <div id="outputArea">
+      <div class="empty-state">Paste battery info above and click Generate.</div>
+    </div>
+    <div class="row" id="outputActions" style="display:none;">
+      <button class="primary" id="printBtn">Print</button>
+      <button class="ghost" id="copyBtn">Copy list</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================= parsing ============================= */
+function parseSpec(text){
+  const lines = text.split('\n').map(l=>l.replace(/\r$/,'')).filter(l=>l.trim().length>0);
+  const fields = {};
+  lines.forEach(line=>{
+    let label, value;
+    if(line.includes('\t')){
+      const idx = line.indexOf('\t');
+      label = line.slice(0, idx).trim();
+      value = line.slice(idx+1).replace(/\t/g,' ').trim();
+    } else if(line.includes(':')){
+      const idx = line.indexOf(':');
+      label = line.slice(0, idx).trim();
+      value = line.slice(idx+1).trim();
+    } else {
+      const m = line.match(/^(.+?)\s{2,}(.+)$/);
+      if(m){ label = m[1].trim(); value = m[2].trim(); }
+      else return;
+    }
+    if(label) fields[label] = value;
+  });
+  return { fields };
+}
+function getField(fields, label){
+  const target = label.trim().toLowerCase().replace(/\s+/g,' ');
+  for(const k in fields){ if(k.trim().toLowerCase().replace(/\s+/g,' ') === target) return fields[k]; }
+  return null;
+}
+function has(str, needle){ if(!str) return false; return str.toLowerCase().includes(needle.toLowerCase()); }
+function findFieldContainingKey(fields, keyword){
+  const kw = keyword.toLowerCase();
+  for(const k in fields){ if(k.toLowerCase().includes(kw)) return { key:k, value:fields[k] }; }
+  return null;
+}
+function isBlankish(v){
+  if(v==null) return true;
+  const t = v.trim().toLowerCase();
+  return t==='' || t==='n/a' || t==='na' || t==='no' || t==='none' || t==='alpine';
+}
+function expandIds(idsRaw){
+  if(!idsRaw) return [];
+  const cleaned = idsRaw.replace(/\([^)]*\)/g,'');
+  const parts = cleaned.split(',').map(p=>p.trim()).filter(Boolean);
+  let result = [];
+  parts.forEach(p=>{
+    const m = p.match(/^(\d+)\s*-\s*(\d+)$/);
+    if(m){
+      const start = parseInt(m[1],10), end = parseInt(m[2],10);
+      if(!isNaN(start) && !isNaN(end) && end>=start && (end-start)<5000){
+        for(let i=start;i<=end;i++) result.push(String(i));
+      }
+    } else {
+      const num = p.match(/\d+/);
+      if(num) result.push(num[0]);
+    }
+  });
+  return result;
+}
+
+/* ============================= derivation ============================= */
+function buildPackingList(fields){
+  const categories = [];
+
+  const add = (catTitle, name, note, flag) => {
+    let cat = categories.find(c=>c.title===catTitle);
+    if(!cat){ cat = { title: catTitle, items: [] }; categories.push(cat); }
+    cat.items.push({ name, note: note||'', flag: !!flag });
+  };
+
+  const screen = getField(fields,'Screen');
+  const chargeJ = getField(fields,'Charge Jumpers');
+  const dischargeJ = getField(fields,'Discharge Jumpers');
+  const telemetry = getField(fields,'Telemetry');
+  const hygCrown = getField(fields,'Hyg / Crown') ?? getField(fields,'Hyg/Crown');
+  const enclosure = getField(fields,'Enclosure');
+  const powershelf = getField(fields,'Powershelf');
+
+  const screenYes = has(screen,'yes') || has(screen,'screen');
+  const telemetryHasObt = has(telemetry,'obt');
+
+  /* 1. Screen */
+  if(screenYes){
+    add('Screen Kit', 'Screen with Diamond mount');
+    add('Screen Kit', 'Ram mount');
+    add('Screen Kit', 'Ball adaptor');
+    if(telemetryHasObt){
+      add('Screen Kit', 'Screen Harness + Telemetry Harness (connected with 8P–8P connector)');
+      add('Screen Kit', 'One-page instruction sheet');
+    } else {
+      add('Screen Kit', 'Screen harness');
+    }
+  }
+
+  /* 2. Charge Jumper — simple copy logic. 1C30 / XC30 / Short 3C designs have lug-mounted jumpers fixed to the battery, not loose parts. */
+  const isLugFixedDesign = has(enclosure,'1C30') || has(enclosure,'XC30') || has(enclosure,'Short 3C')
+    || has(powershelf,'1C30') || has(powershelf,'XC30') || has(powershelf,'Short 3C');
+
+  if(!isBlankish(chargeJ)){
+    const textSaysPreinstalled = has(chargeJ,'pre install') || has(chargeJ,'pre-install') || has(chargeJ,'preinstalled');
+    const fixed = textSaysPreinstalled || isLugFixedDesign;
+    if(!fixed){
+      add('Jumpers', 'Charge Jumper: ' + chargeJ, 'Included in the box');
+    }
+  }
+
+  /* 3. Discharge Jumper — same logic */
+  if(!isBlankish(dischargeJ)){
+    const textSaysPreinstalled = has(dischargeJ,'pre install') || has(dischargeJ,'pre-install') || has(dischargeJ,'preinstalled');
+    const fixed = textSaysPreinstalled || isLugFixedDesign;
+    if(!fixed){
+      add('Jumpers', 'Discharge Jumper: ' + dischargeJ, 'Included in the box');
+    }
+  }
+
+  /* 4. Telemetry / OBT / Cloudlink */
+  {
+    const hasObt = has(telemetry,'obt');
+    const hasWifi = has(telemetry,'wifi');
+    const hasCloudlink = has(telemetry,'cloudlink');
+    const hasDemo = Object.values(fields).some(v=>has(v,'demo'));
+
+    if(hasObt){
+      /* Screen Harness + Telemetry Harness + instruction sheet are added under Screen Kit above when Screen: Yes */
+    } else if(hasWifi){
+      add('Telemetry', 'Telemetry');
+      add('Telemetry', 'Telemetry harness');
+    } else if(!isBlankish(telemetry) && !hasCloudlink){
+      add('Telemetry', 'Telemetry: ' + telemetry, 'Type not recognized (expected Wifi / OBT) — confirm what ships', true);
+    }
+
+    if(hasCloudlink){
+      const isL1 = has(telemetry,'l1') || has(telemetry,'service') || has(telemetry,'kit');
+      const isModem = has(telemetry,'modem');
+      if(isL1 && !isModem){
+        add('Telemetry', 'Cloudlink L1 Tool', 'Ships in a separate MEIJIA black case + Stromcore magnet', false);
+      } else if(isModem){
+        add('Telemetry', 'Cloudlink Modem', 'Installed inside the box', false);
+      } else {
+        add('Telemetry', 'Cloudlink', 'Type not specified (modem vs L1 tool) — confirm before packing', true);
+      }
+      if(hasDemo) add('Telemetry', 'Cloudlink — DEMO unit note', 'Battery info says DEMO unit — confirm cloudlink is actually required', true);
+    }
+  }
+
+  /* 5. HYG / Crown harness */
+  if(!isBlankish(hygCrown)){
+    const is90 = has(enclosure,'1C30')||has(enclosure,'2C30')||has(enclosure,'2C29')||has(enclosure,'Short 3C')||has(enclosure,'3C Short');
+    if(has(hygCrown,'hyg')){
+      add('Forklift Integration', 'HYG Harness — ' + (is90 ? '90°' : 'Straight'));
+    } else if(has(hygCrown,'crown')){
+      add('Forklift Integration', 'Crown Harness — ' + (is90 ? '90°' : 'Straight'));
+    } else {
+      add('Forklift Integration', 'Hyg / Crown: ' + hygCrown, 'Value not recognized as HYG or Crown — confirm what ships', true);
+    }
+  }
+
+  /* 6. Latch and Instructions */
+  {
+    const client = getField(fields,'Client');
+    const site = getField(fields,'Customer Site');
+    const isPCA = has(client,'pca') || has(site,'pca');
+    const latchField = findFieldContainingKey(fields,'latch');
+    const latchMentioned = latchField && !isBlankish(latchField.value);
+
+    if(latchMentioned){
+      add('Packaging', 'Latch and Instructions', 'Per battery info: ' + latchField.value);
+    } else if(isPCA && !latchField){
+      add('Packaging', 'Latch and Instructions', 'Included by default for PCA orders — no latch info given');
+    }
+  }
+
+  return { categories };
+}
+
+/* ============================= rendering ============================= */
+let lastResult = null;
+let lastMeta = null;
+
+function renderOutput(result, meta){
+  const container = document.getElementById('outputArea');
+  let html = '';
+  html += '<div class="meta"><div class="title">' + escapeHtml(meta.client || 'Packing List') + '</div>';
+  html += '<div class="stamp">' + escapeHtml(meta.site||'') + '</div></div>';
+
+  if(result.categories.length===0){
+    html += '<div class="empty-state">No confirmed-rule items matched this spec.</div>';
+  }
+  result.categories.forEach((cat,ci)=>{
+    html += '<div class="cat"><h3>'+escapeHtml(cat.title)+'</h3>';
+    cat.items.forEach((it,ii)=>{
+      html += '<div class="item editing">' +
+        '<div class="item-edit-fields">' +
+          '<input type="text" class="name-input" data-cat="'+ci+'" data-item="'+ii+'" value="'+escapeHtml(it.name)+'">' +
+          (it.note ? '<div class="note'+(it.flag?' flag':'')+'">'+escapeHtml(it.note)+'</div>' : '') +
+        '</div>' +
+        '<button class="icon-x" data-remove-cat="'+ci+'" data-remove-item="'+ii+'">✕</button>' +
+      '</div>';
+    });
+    html += '<div class="add-item-row"><button class="ghost small" data-add-item-cat="'+ci+'">+ Add item</button></div>';
+    html += '</div>';
+  });
+
+  html += '<div class="add-item-row" style="margin-bottom:18px;"><button class="ghost small" id="addCategoryBtn">+ Add category</button></div>';
+
+  const serials = expandIds(meta.ids);
+  if(serials.length>0){
+    html += '<div class="cat"><h3>System Numbers</h3><div class="sysnum-grid">';
+    serials.forEach((s,i)=>{
+      html += '<div class="sysnum"><input type="checkbox" id="sn'+i+'"><label for="sn'+i+'">'+escapeHtml(s)+'</label></div>';
+    });
+    html += '</div></div>';
+  }
+
+  container.innerHTML = html;
+  document.getElementById('outputActions').style.display = (result.categories.length || serials.length) ? 'flex' : 'none';
+}
+
+function escapeHtml(s){
+  if(s==null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ============================= copy ============================= */
+function buildStyledHtml(result, meta){
+  const th = 'background:#FFFF00;color:#000;font-family:Calibri,sans-serif;font-size:14px;font-weight:bold;border:1px solid #000;padding:4px 8px;text-align:left;';
+  const tdBase = 'font-family:Calibri,sans-serif;font-size:14px;border:1px solid #000;padding:4px 8px;vertical-align:top;';
+  let html = '<table style="border-collapse:collapse;">';
+  html += '<tr><th style="'+th+'width:80px;">Category</th><th style="'+th+'width:255px;">Item</th><th style="'+th+'">Note</th></tr>';
+  result.categories.forEach(cat=>{
+    cat.items.forEach(it=>{
+      html += '<tr>' +
+        '<td style="'+tdBase+'width:80px;">'+escapeHtml(cat.title)+'</td>' +
+        '<td style="'+tdBase+'width:255px;">'+escapeHtml(it.name)+'</td>' +
+        '<td style="'+tdBase+'">'+escapeHtml(it.note||'')+'</td>' +
+        '</tr>';
+    });
+  });
+  html += '</table>';
+  return html;
+}
+function buildPlainList(result){
+  let lines = [];
+  result.categories.forEach(cat=>{
+    lines.push('--- ' + cat.title + ' ---');
+    cat.items.forEach(it=> lines.push('- ' + it.name + (it.note? ' (' + it.note + ')' : '')));
+  });
+  return lines.join('\n');
+}
+async function copyList(){
+  if(!lastResult) return;
+  const html = buildStyledHtml(lastResult, lastMeta);
+  const text = buildPlainList(lastResult);
+  try{
+    if(window.ClipboardItem){
+      const item = new ClipboardItem({ 'text/html': new Blob([html], {type:'text/html'}), 'text/plain': new Blob([text], {type:'text/plain'}) });
+      await navigator.clipboard.write([item]);
+      showToast('List copied — paste into Sheets/Docs');
+      return;
+    }
+  }catch(e){}
+  try{ await navigator.clipboard.writeText(text); showToast('Copied as plain text'); return; }catch(e){}
+  const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); showToast('Copied as plain text'); } catch(e){ showToast('Copy failed — select manually'); }
+  document.body.removeChild(ta);
+}
+function buildPrintDoc(result, meta){
+  const serials = expandIds(meta.ids);
+  let itemsHtml = '';
+  result.categories.forEach(cat=>{
+    itemsHtml += '<h3>'+escapeHtml(cat.title)+'</h3><table class="ptable">';
+    cat.items.forEach(it=>{
+      itemsHtml += '<tr><td class="pname">'+escapeHtml(it.name)+'</td><td class="pnote">'+escapeHtml(it.note||'')+'</td></tr>';
+    });
+    itemsHtml += '</table>';
+  });
+  let sysHtml = '';
+  if(serials.length>0){
+    sysHtml += '<h3>System Numbers</h3><div class="psys">';
+    serials.forEach(s=>{
+      sysHtml += '<div class="psys-item"><span class="pbox"></span>'+escapeHtml(s)+'</div>';
+    });
+    sysHtml += '</div>';
+  }
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + escapeHtml(meta.client||'Packing List') + ' — Box Accessories</title>' +
+    '<style>' +
+    'body{ font-family:Calibri,Arial,sans-serif; color:#000; margin:32px; }' +
+    'h1{ font-size:20px; margin:0 0 2px; text-transform:uppercase; }' +
+    '.stamp{ color:#444; font-size:12px; margin-bottom:20px; }' +
+    'h3{ font-size:14px; text-transform:uppercase; letter-spacing:0.4px; border-bottom:1px solid #999; padding-bottom:4px; margin:18px 0 6px; }' +
+    'table.ptable{ width:100%; border-collapse:collapse; margin-bottom:6px; }' +
+    'table.ptable td{ padding:5px 4px; border-bottom:1px solid #ddd; font-size:13px; vertical-align:top; }' +
+    'td.pname{ font-weight:600; width:55%; }' +
+    'td.pnote{ color:#555; }' +
+    '.psys{ display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }' +
+    '.psys-item{ display:flex; align-items:center; gap:6px; font-family:monospace; font-size:13px; border:1px solid #999; border-radius:4px; padding:6px 10px; }' +
+    '.pbox{ width:13px; height:13px; border:1.5px solid #333; display:inline-block; }' +
+    '@media print{ body{ margin:12mm; } .no-print{ display:none !important; } }' +
+    '</style></head><body>' +
+    '<button class="no-print" onclick="window.print()" style="font-family:Arial,sans-serif;font-weight:600;font-size:13px;padding:8px 16px;margin-bottom:16px;border:1px solid #999;border-radius:6px;background:#f2b705;cursor:pointer;">Print / Save as PDF</button>' +
+    '<h1>' + escapeHtml(meta.client||'Packing List') + '</h1>' +
+    '<div class="stamp">' + escapeHtml(meta.site||'') + '</div>' +
+    itemsHtml + sysHtml +
+    '</body></html>';
+}
+
+function printList(){
+  if(!lastResult){ showToast('Generate a list first'); return; }
+  const doc = buildPrintDoc(lastResult, lastMeta);
+  const win = window.open('', '_blank');
+  if(!win){ showToast('Pop-up blocked — allow pop-ups for this page to print'); return; }
+  win.document.open();
+  win.document.write(doc);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>{ win.print(); }, 400);
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(showToast._h); showToast._h = setTimeout(()=> t.classList.remove('show'), 2200);
+}
+
+/* ============================= main ============================= */
+document.getElementById('generateBtn').addEventListener('click', ()=>{
+  const text = document.getElementById('specInput').value;
+  if(!text.trim()){ showToast('Paste battery info first'); return; }
+  const { fields } = parseSpec(text);
+  const result = buildPackingList(fields);
+  lastResult = result;
+  lastMeta = {
+    client: getField(fields,'Client') || getField(fields,'Customer Site') || 'Packing List',
+    site: getField(fields,'Customer Site') || '',
+    ids: getField(fields,'ID#s') || ''
+  };
+  renderOutput(result, lastMeta);
+});
+document.getElementById('clearBtn').addEventListener('click', ()=>{ document.getElementById('specInput').value = ''; });
+document.getElementById('copyBtn').addEventListener('click', copyList);
+document.getElementById('printBtn').addEventListener('click', printList);
+
+/* Delegated events for the editable list */
+document.getElementById('outputArea').addEventListener('input', (e)=>{
+  if(!lastResult) return;
+  const ci = e.target.getAttribute('data-cat');
+  const ii = e.target.getAttribute('data-item');
+  if(ci==null || ii==null) return;
+  const item = lastResult.categories[ci].items[ii];
+  if(!item) return;
+  if(e.target.classList.contains('name-input')) item.name = e.target.value;
+  if(e.target.classList.contains('note-input')) item.note = e.target.value;
+});
+
+document.getElementById('outputArea').addEventListener('click', (e)=>{
+  if(!lastResult) return;
+
+  const rmCat = e.target.getAttribute('data-remove-cat');
+  const rmItem = e.target.getAttribute('data-remove-item');
+  if(rmCat!=null && rmItem!=null){
+    lastResult.categories[rmCat].items.splice(parseInt(rmItem,10),1);
+    if(lastResult.categories[rmCat].items.length===0) lastResult.categories.splice(parseInt(rmCat,10),1);
+    renderOutput(lastResult, lastMeta);
+    return;
+  }
+
+  const addCat = e.target.getAttribute('data-add-item-cat');
+  if(addCat!=null){
+    lastResult.categories[addCat].items.push({ name:'New item', note:'', flag:false });
+    renderOutput(lastResult, lastMeta);
+    return;
+  }
+
+  if(e.target.id === 'addCategoryBtn'){
+    lastResult.categories.push({ title:'Additional Items', items:[{ name:'New item', note:'', flag:false }] });
+    renderOutput(lastResult, lastMeta);
+    return;
+  }
+});
+</script>
+</body>
+</html>
