@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Framp Table Generator — Stromcore QC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #14171b;
+    --panel: #1d2126;
+    --panel-2: #242930;
+    --border: #333a44;
+    --border-lit: #454e5b;
+    --text: #e7e9ec;
+    --muted: #8a93a0;
+    --dim: #5c6470;
+    --amber: #f5a623;
+    --amber-dim: #6b5324;
+    --teal: #3ddc97;
+    --teal-dim: #1f5c46;
+    --blue: #5b8def;
+    --red: #e8604c;
+    --mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+  }
+  .rivet-strip{
+    height:6px;
+    background: repeating-linear-gradient(90deg, var(--amber) 0 2px, transparent 2px 18px);
+    opacity:.55;
+  }
+  header{
+    padding:22px 28px 18px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .brand{display:flex; align-items:center; gap:14px;}
+  .plate{
+    width:40px; height:40px; border-radius:6px; background:linear-gradient(155deg,#2b3138,#1a1d22);
+    border:1px solid var(--border-lit); display:flex; align-items:center; justify-content:center;
+    font-family:var(--mono); font-weight:700; color:var(--amber); font-size:13px; letter-spacing:.5px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  h1{font-size:16px; margin:0; letter-spacing:.3px; font-weight:700;}
+  .sub{color:var(--muted); font-size:12.5px; margin-top:2px; font-family:var(--mono);}
+  .badge{
+    font-family:var(--mono); font-size:11px; color:var(--dim); border:1px solid var(--border);
+    padding:5px 10px; border-radius:20px; letter-spacing:.4px;
+  }
+  main{display:grid; grid-template-columns: 420px 1fr; gap:0; min-height:calc(100vh - 90px);}
+  @media (max-width: 900px){ main{grid-template-columns:1fr;} }
+
+  .form-col{padding:22px; border-right:1px solid var(--border); overflow-y:auto;}
+  .out-col{padding:22px; background:radial-gradient(circle at 20% 0%, #191d22 0%, var(--bg) 60%);}
+
+  fieldset{border:1px solid var(--border); border-radius:10px; padding:16px 16px 18px; margin:0 0 16px; background:var(--panel);}
+  legend{
+    font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:1.2px;
+    color:var(--amber); padding:0 8px; font-weight:600;
+  }
+  label{display:block; font-size:12.5px; color:var(--muted); margin:10px 0 5px; font-weight:500;}
+  label:first-of-type{margin-top:2px;}
+  input[type=text], input[type=number], select{
+    width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+    padding:9px 10px; border-radius:6px; font-family:var(--sans); font-size:13.5px; outline:none;
+    transition:border-color .15s;
+  }
+  input:focus, select:focus{border-color:var(--blue);}
+  .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .row3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;}
+  .radio-row{display:flex; gap:8px; margin-top:4px;}
+  .radio-btn{
+    flex:1; text-align:center; padding:9px 6px; border:1px solid var(--border); border-radius:6px;
+    cursor:pointer; font-size:12.5px; color:var(--muted); user-select:none; transition:.15s;
+  }
+  .radio-btn.active{border-color:var(--blue); color:var(--text); background:rgba(91,141,239,.12);}
+  .hint{font-size:11px; color:var(--dim); margin-top:5px; line-height:1.5;}
+  .conditional{display:none;}
+  .conditional.show{display:block;}
+
+  .out-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;}
+  .out-title{font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:1.4px; color:var(--muted);}
+  .copy-btn{
+    background:var(--panel-2); border:1px solid var(--border-lit); color:var(--text); padding:9px 16px;
+    border-radius:6px; font-family:var(--sans); font-size:12.5px; font-weight:600; cursor:pointer; transition:.15s;
+    display:flex; align-items:center; gap:7px;
+  }
+  .copy-btn:hover{border-color:var(--teal); color:var(--teal);}
+  .copy-btn:active{transform:scale(.97);}
+
+  .plate-frame{
+    border:1px solid var(--border-lit); border-radius:12px; background:linear-gradient(180deg,#20242b,#191c21);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.02), 0 8px 30px rgba(0,0,0,.35);
+    padding:4px; position:relative;
+  }
+  .plate-frame::before, .plate-frame::after{
+    content:''; position:absolute; width:7px; height:7px; border-radius:50%;
+    background:radial-gradient(circle at 35% 35%, #6b7280, #2c3038); top:12px;
+  }
+  .plate-frame::before{left:12px;}
+  .plate-frame::after{right:12px;}
+  .plate-inner{border:1px solid var(--border); border-radius:9px; padding:18px;}
+  .plate-meta{font-family:var(--mono); font-size:11px; color:var(--dim); margin-bottom:14px;}
+
+  .sheet{background:#ffffff; border-radius:4px; overflow:hidden; border:1px solid #000;}
+  table{width:100%; border-collapse:collapse; font-family:Calibri, Arial, 'Segoe UI', sans-serif; font-size:14px;}
+  td{padding:5px 10px; border:1px solid #000; color:#000;}
+  td.k{width:56%; background:#fff;}
+  td.v{color:#000; background:#fff;}
+  tr.flag td.v{color:#B7791F; font-weight:700;}
+  tr.hdr td{background:#FFFF00; font-weight:700; color:#000;}
+  tr.spacer td{border:none; background:transparent; padding:8px 0;}
+
+  .confirm-box{
+    margin-top:16px; border:1px dashed var(--amber-dim); background:rgba(245,166,35,.06);
+    border-radius:8px; padding:12px 14px;
+  }
+  .confirm-box .cb-title{font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:.6px; margin-bottom:6px; text-transform:uppercase; font-weight:600;}
+  .confirm-box .cb-line{font-size:12px; color:var(--muted); line-height:1.6;}
+  .confirm-box .cb-line b{color:var(--text);}
+
+  .empty{color:var(--dim); font-family:var(--mono); font-size:12.5px; padding:40px 10px; text-align:center;}
+  .toast{
+    position:fixed; bottom:20px; left:50%; transform:translateX(-50%) translateY(20px); opacity:0;
+    background:var(--teal-dim); color:var(--teal); border:1px solid var(--teal); padding:9px 18px;
+    border-radius:20px; font-size:12.5px; font-family:var(--mono); transition:.25s; pointer-events:none;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="rivet-strip"></div>
+<header>
+  <div class="brand">
+    <div class="plate">FR</div>
+    <div>
+      <h1>Framp Table Generator</h1>
+      <div class="sub">Stromcore Production QC — PWI0056 Table 4 + Global Config</div>
+    </div>
+  </div>
+  <div class="badge">CANONICAL TEMPLATE v1</div>
+</header>
+
+<main>
+  <div class="form-col">
+
+    <fieldset id="pasteBox">
+      <legend>Paste Battery Info</legend>
+      <label>Paste the spec block (Client / Model / Powershelf / etc.) — no manual entry needed</label>
+      <textarea id="pasteArea" rows="6" style="width:100%; background:var(--panel-2); border:1px solid var(--border); color:var(--text); padding:9px 10px; border-radius:6px; font-family:var(--mono); font-size:12px; resize:vertical;" placeholder="Client	Whirlpool&#10;Customer Site	Whirlpool TX&#10;ID#s	13554&#10;Model	48V-500AH-38-30-22&#10;...paste the whole block here..."></textarea>
+      <button class="copy-btn" style="width:100%; justify-content:center; margin-top:10px;" onclick="parseSpec()">⤓ Parse &amp; Fill Form</button>
+      <div class="hint" id="parseStatus">Paste a spec block, then click Parse. Review the filled fields below — flagged fields (UL, heater config) still need your confirmation.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Unit Identity</legend>
+      <label>Client / Customer Site</label>
+      <input type="text" id="client" placeholder="e.g. Whirlpool TX">
+      <label>ID# / Serial(s)</label>
+      <input type="text" id="serial" placeholder="e.g. 13554  or  13521, 13522, 13523">
+      <div class="hint">Comma-separate multiple Serials for a batch order — they'll be listed together in one table.</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Pack &amp; Modules</legend>
+      <label>Pack Voltage (4 valid classes — anything above 80V is bucketed as 80)</label>
+      <div class="radio-row" id="packRow">
+        <div class="radio-btn" data-val="24">24V</div>
+        <div class="radio-btn" data-val="36">36V</div>
+        <div class="radio-btn active" data-val="48">48V</div>
+        <div class="radio-btn" data-val="80">80V</div>
+      </div>
+      <label>Actual System Voltage <span style="color:var(--dim); font-weight:400;">(for Global Config — only differs from Pack above 80V)</span></label>
+      <input type="number" id="actualVoltage" placeholder="e.g. 96, 85, 120 — leave blank if same as Pack">
+      <div class="row2">
+        <div><label>Active Modules</label><input type="number" id="modules" value="5" min="1"></div>
+        <div><label>Charge Rate (A)</label><input type="number" id="chargeRate" placeholder="e.g. 400" min="1"></div>
+      </div>
+      <div class="hint" id="moduleCountWarning" style="display:none; color:var(--amber);"></div>
+    </fieldset>
+    <div class="hint" id="voltageWarning" style="display:none; color:var(--amber); margin:-10px 0 14px;"></div>
+
+    <fieldset>
+      <legend>Module Source</legend>
+      <div class="radio-row" id="sourceRow">
+        <div class="radio-btn active" data-val="production">Production (new)</div>
+        <div class="radio-btn" data-val="pns">P&amp;S / Parts (used)</div>
+      </div>
+      <div class="conditional" id="pnsFields">
+        <div class="row2">
+          <div>
+            <label>Cell Capacity</label>
+            <div class="radio-row" id="cellCapRow">
+              <div class="radio-btn" data-val="50">50Ah</div>
+              <div class="radio-btn active" data-val="60">60Ah</div>
+            </div>
+          </div>
+          <div><label>Cell SOH (%)</label><input type="number" id="cellSoh" placeholder="e.g. 88"></div>
+        </div>
+        <label>CV Setting (%)</label>
+        <input type="number" id="cvSetting" placeholder="Leave blank to default = 100">
+        <div class="hint">No value given → defaults to 100 automatically.</div>
+      </div>
+      <div class="hint" id="productionHint">Production, 60Ah: cell_cap=60, cv_point=3925, cell_soh=100, cv_setting=100 (all locked defaults).</div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Charger &amp; Heater</legend>
+      <label>Charger</label>
+      <select id="charger">
+        <option value="3">Bassi (Single Protocol) — charger=3</option>
+        <option value="3">Gebat — mapped to Bassi Single, charger=3</option>
+        <option value="4">Bassi Dual Protocol — charger=4</option>
+        <option value="0">BMID — charger=0</option>
+        <option value="7">BMID (Single Port) — charger=7</option>
+        <option value="1">ProcoreCAN — charger=1</option>
+        <option value="2">IEB (Single Protocol) — charger=2</option>
+        <option value="5">IEB Dual Protocol — charger=5</option>
+        <option value="6">Procore Jumpers — charger=6</option>
+      </select>
+      <label>Heater</label>
+      <div class="radio-row" id="heaterRow">
+        <div class="radio-btn" data-val="no">No</div>
+        <div class="radio-btn active" data-val="yes">Yes</div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Forklift / Hyg-Crown</legend>
+      <label>Forklift OEM</label>
+      <select id="forkliftOem">
+        <option value="crown">Crown</option>
+        <option value="raymond">Raymond</option>
+        <option value="other">Other (Toyota, etc — use Regular code)</option>
+      </select>
+      <div class="conditional show" id="regularCodeField">
+        <label>Hyg/Crown Integration Type</label>
+        <select id="regularCode">
+          <option value="0">n/a — 0</option>
+          <option value="1">HYG — 1</option>
+          <option value="2">Motrec — 2</option>
+          <option value="3">GVIP — 3</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>UL Configuration <span style="color:var(--amber); font-size:10px;">(needs confirmation)</span></legend>
+      <div class="radio-row" id="ulRow">
+        <div class="radio-btn active" data-val="no">UL: No</div>
+        <div class="radio-btn" data-val="yes">UL: Yes</div>
+      </div>
+      <div class="conditional" id="ulFields">
+        <div class="row3">
+          <div><label>Country</label><select id="ulCountry"><option value="1">USA</option><option value="2">CA</option></select></div>
+          <div><label>Ports</label><select id="ulPorts"><option value="1">Single</option><option value="2">Dual</option></select></div>
+          <div><label>Port Type</label><select id="ulPortType"><option value="1">Euro</option><option value="2">LV</option></select></div>
+        </div>
+        <div class="hint">Discharge/charge limits auto-derate to modules × 100A if lower than the table max. ≥700Ah USA units use higher charge limits per the UL guide.</div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Heater Config Layout <span style="color:var(--amber); font-size:10px;">(needs confirmation)</span></legend>
+      <div class="conditional show" id="heaterLayoutWrap">
+        <label>Enclosure / Core Layout</label>
+        <select id="heaterLayout">
+          <option value="none">— select if heater = Yes —</option>
+          <option value="2c">2C enclosure (2-column: 1,2/5,6/9,10...)</option>
+          <option value="4across_full">4-across, full rows (1,2,3,4/5,6,7,8)</option>
+          <option value="4across_gap8">4-across w/ gaps, 8 modules (1-4/5,6/9,10)</option>
+          <option value="9mod">9-module (1,2,3/5,6,7/9,10,11)</option>
+          <option value="10mod">10-module (1-4/5-8/9,10)</option>
+          <option value="12mod">12-module full (1-4/5-8/9-12)</option>
+          <option value="r3c">48V R3C (1,2,3 / _,6,7)</option>
+          <option value="r4c">48V R4C (_,1,2,3 / _,5,6,7 / _,_,10,11)</option>
+          <option value="1c30">1C30 24V-400AH (single column)</option>
+          <option value="3c_ses">80V 3C SES unit</option>
+          <option value="3cs500">3CS 48V-500AH (1,2,3/5,6)</option>
+          <option value="3cs400">3CS 48V-400AH (1,2,3/5)</option>
+          <option value="3cs600">3CS 48V-600AH (1,2,3/5,6,7)</option>
+        </select>
+      </div>
+    </fieldset>
+
+  </div>
+
+  <div class="out-col">
+    <div class="out-header">
+      <div class="out-title">Generated Framp Table</div>
+      <button class="copy-btn" onclick="copyTable()">⧉ Copy as text</button>
+    </div>
+    <div id="output"></div>
+  </div>
+</main>
+
+<div class="toast" id="toast">Copied to clipboard</div>
+
+<div id="psModalOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--panel); border:1px solid var(--amber); border-radius:12px; max-width:420px; padding:24px; box-shadow:0 20px 60px rgba(0,0,0,.5);">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+      <span style="font-size:20px;">⚠</span>
+      <span id="psModalTitle" style="font-family:var(--mono); font-size:12px; color:var(--amber); text-transform:uppercase; letter-spacing:1px; font-weight:700;">Used Modules Detected</span>
+    </div>
+    <div id="psModalMessage" style="font-size:13.5px; color:var(--text); line-height:1.6; margin-bottom:18px;"></div>
+    <button onclick="document.getElementById('psModalOverlay').style.display='none';" style="width:100%; background:var(--amber); color:#1a1200; border:none; padding:10px; border-radius:6px; font-weight:700; font-size:13px; cursor:pointer;">OK, I'll check manually</button>
+  </div>
+</div>
+
+<script>
+const state = { pack:'48', source:'production', cellCap:'60', heater:'yes', ul:'no' };
+
+function wireRadioGroup(rowId, key){
+  const row = document.getElementById(rowId);
+  row.querySelectorAll('.radio-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      row.querySelectorAll('.radio-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state[key] = btn.dataset.val;
+      onChange();
+    });
+  });
+}
+wireRadioGroup('packRow','pack');
+wireRadioGroup('sourceRow','source');
+wireRadioGroup('cellCapRow','cellCap');
+wireRadioGroup('heaterRow','heater');
+wireRadioGroup('ulRow','ul');
+
+document.getElementById('forkliftOem').addEventListener('change', e=>{
+  document.getElementById('regularCodeField').classList.toggle('show', e.target.value === 'other');
+  onChange();
+});
+
+['client','serial','modules','chargeRate','cellSoh','cvSetting','charger','regularCode','ulCountry','ulPorts','ulPortType','heaterLayout','actualVoltage'].forEach(id=>{
+  document.getElementById(id).addEventListener('input', onChange);
+  document.getElementById(id).addEventListener('change', onChange);
+});
+
+const HEATER_TABLE = {
+  '2c':          {label:'2C enclosure', dcdcRule:'always', value:0, ambiguous:false},
+  '4across_full':{label:'4-across full rows (1-4/5-8), 2R harness', dcdc:2, value:204, ambiguous:false},
+  '4across_gap8':{label:'4-across w/ gaps, 8 modules, 3R harness', dcdc:2, value:28, ambiguous:false},
+  '9mod':        {label:'9-module layout', dcdc:3, value:2184, ambiguous:false},
+  '10mod':       {label:'10-module layout', dcdc:3, value:2184, ambiguous:false},
+  '12mod':       {label:'12-module full', dcdc:3, value:2184, ambiguous:false},
+  'r3c':         {label:'48V R3C', dcdc:2, value:86, ambiguous:false},
+  'r4c':         {label:'48V R4C', dcdc:2, value:1140, ambiguous:false},
+  '1c30':        {label:'1C30 24V-400AH', dcdc:1, value:0, ambiguous:false},
+  '3c_ses':      {label:'80V 3C SES unit', dcdc:2, value:0, ambiguous:false},
+  '3cs500':      {label:'3CS 48V-500AH', dcdc:2, value:20, ambiguous:false},
+  '3cs400':      {label:'3CS 48V-400AH', dcdc:1, value:6, ambiguous:false},
+  '3cs600':      {label:'3CS 48V-600AH', dcdc:2, value:100, ambiguous:false},
+};
+
+function detectLayout(enclosureText, modelText, modules, harnessText){
+  const e = (enclosureText || '').toLowerCase();
+  const h = (harnessText || '').toLowerCase();
+  if (/2c/.test(e)) return {key:'2c'};
+  if (/r3c/.test(e)) return {key:'r3c'};
+  if (/r4c/.test(e)) return {key:'r4c'};
+  if (/1c30/.test(e)) return {key:'1c30'};
+  if (/ses/.test(e)) return {key:'3c_ses'};
+  if (/3cs/.test(e)){
+    const ahMatch = (modelText || '').match(/(\d+)\s*ah/i);
+    const ah = ahMatch ? ahMatch[1] : null;
+    if (ah === '500') return {key:'3cs500'};
+    if (ah === '400') return {key:'3cs400'};
+    if (ah === '600') return {key:'3cs600'};
+    return {key:null, reason:'3CS AH capacity not detected from Model'};
+  }
+  if (/3c\b/.test(e) || /4c\b/.test(e)){
+    if (modules === 9) return {key:'9mod'};
+    if (modules === 10) return {key:'10mod'};
+    if (modules === 12) return {key:'12mod'};
+    if (modules === 8){
+      if (/2r/.test(h)) return {key:'4across_full'};
+      if (/3r/.test(h)) return {key:'4across_gap8'};
+      return {key:null, reason:'8-module 3C/4C: check Harness field (2R=full rows/204, 3R=with gaps/28) — not stated or not recognized'};
+    }
+    return {key:null, reason:'Module count not in reference table for this enclosure'};
+  }
+  return {key:null, reason:'Enclosure type not recognized from text'};
+}
+
+function dcdcCount(modules){ return Math.ceil(modules / 4); }
+
+function computeUlConfig(){
+  const country = document.getElementById('ulCountry').value;
+  const ports = document.getElementById('ulPorts').value;
+  const portType = document.getElementById('ulPortType').value;
+  const code = country + ports + portType;
+  const modules = parseInt(document.getElementById('modules').value) || 0;
+
+  const table = {
+    '111':{d:400,c:400}, '112':{d:400,c:400}, '121':{d:400,c:600}, '122':{d:400,c:600},
+    '211':{d:325,c:250}, '212':{d:325,c:300}, '221':{d:325,c:500}, '222':{d:325,c:600},
+  };
+  const table700 = { '111':{d:400,c:425}, '112':{d:400,c:425}, '121':{d:400,c:625}, '122':{d:400,c:625} };
+
+  let limits = table[code];
+  let note = '';
+  if (table700[code]) note = ' (≥700Ah USA variant available — confirm capacity)';
+  if (!limits) return {code, discharge:'?', charge:'?', note:'Unrecognized combination'};
+
+  const cap = modules * 100;
+  const derateD = Math.min(limits.d, cap);
+  const derateC = Math.min(limits.c, cap);
+  return {code, discharge:derateD, charge:derateC, derated: (derateD<limits.d || derateC<limits.c), note};
+}
+
+function showWarningModal(title, messageHtml){
+  document.getElementById('psModalTitle').textContent = title;
+  document.getElementById('psModalMessage').innerHTML = messageHtml;
+  document.getElementById('psModalOverlay').style.display = 'flex';
+}
+
+function setRadio(rowId, key, val){
+  const row = document.getElementById(rowId);
+  state[key] = val;
+  row.querySelectorAll('.radio-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.val === val);
+  });
+}
+
+function parseSpec(){
+  const raw = document.getElementById('pasteArea').value;
+  if (!raw.trim()){ return; }
+  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  const dict = {};
+  lines.forEach(line=>{
+    let parts = line.split('\t').map(s=>s.trim()).filter(Boolean);
+    if (parts.length < 2){
+      const colonMatch = line.match(/^([A-Za-z0-9#\/\s]+?):\s*(.+)$/);
+      if (colonMatch) parts = [colonMatch[1].trim(), colonMatch[2].trim()];
+    }
+    if (parts.length < 2){
+      const m = line.match(/^([A-Za-z#\/\s]+?)\s{2,}(.+)$/);
+      if (m) parts = [m[1].trim(), m[2].trim()];
+    }
+    if (parts.length >= 2){
+      const key = parts[0].toLowerCase().replace(/#/g,'').replace(/\s+/g,' ').trim();
+      const val = parts.slice(1).join(' ').trim();
+      dict[key] = val;
+    }
+  });
+  const dictKeys = Object.keys(dict);
+  const find = (...keys) => {
+    for (const k of keys){ if (dict[k] !== undefined) return dict[k]; }
+    for (const k of keys){
+      const hit = dictKeys.find(dk => dk.startsWith(k) || k.startsWith(dk));
+      if (hit) return dict[hit];
+    }
+    return null;
+  };
+
+  document.getElementById('serial').value = '';
+  document.getElementById('modules').value = '';
+  document.getElementById('chargeRate').value = '';
+  document.getElementById('cellSoh').value = '';
+  document.getElementById('cvSetting').value = '';
+
+  const issues = [];
+
+  const clientVal = find('client');
+  const siteVal = find('customer site');
+  document.getElementById('client').value = [clientVal, siteVal].filter(Boolean).join(' - ');
+
+  const idVal = find('id', 'ids');
+  if (idVal){
+    const cleaned = idVal.replace(/\(.*?\)/g,'').trim();
+    const rangeMatch = cleaned.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (rangeMatch){
+      const start = parseInt(rangeMatch[1]);
+      const end = parseInt(rangeMatch[2]);
+      if (end >= start && (end - start) <= 500){
+        const expanded = [];
+        for (let n = start; n <= end; n++) expanded.push(n);
+        document.getElementById('serial').value = expanded.join(', ');
+      } else {
+        document.getElementById('serial').value = cleaned;
+      }
+    } else {
+      document.getElementById('serial').value = cleaned;
+    }
+  }
+
+  const modelVal = find('model') || '';
+  const vMatch = modelVal.match(/(\d+)\s*v/i);
+  const voltageWarn = document.getElementById('voltageWarning');
+  voltageWarn.style.display = 'none';
+  if (vMatch){
+    const v = parseInt(vMatch[1]);
+    document.getElementById('actualVoltage').value = v;
+    let bucket;
+    if ([24,36,48,80].includes(v)) bucket = String(v);
+    else if (v > 48) bucket = '80';
+    else if (v > 36) bucket = '48';
+    else if (v > 24) bucket = '36';
+    else bucket = '24';
+    setRadio('packRow','pack', bucket);
+    if (![24,36,48,80,96].includes(v)){
+      voltageWarn.style.display = 'block';
+      voltageWarn.textContent = `⚠ Actual voltage ${v}V isn't 24/36/48/80/96 — Global Config for this exact voltage isn't a confirmed rule yet. Using standard 36/48 pairing as a placeholder; please confirm.`;
+      issues.push(`Actual voltage ${v}V isn't a confirmed Global Config case (only 24/36/48/80/96 are) — verify MOD_1_V/MOD_2_V manually.`);
+    }
+  }
+
+  const modulesVal = find('modules') || '';
+  const modCountMatch = modulesVal.match(/^\s*(\d+)/);
+  if (modCountMatch) document.getElementById('modules').value = modCountMatch[1];
+
+  const moduleWarn = document.getElementById('moduleCountWarning');
+  moduleWarn.style.display = 'none';
+  const packBucket = state.pack;
+  if (modCountMatch){
+    const ahModelMatch = modelVal.match(/(\d+)\s*ah/i);
+    if (ahModelMatch){
+      const baseModules = parseInt(ahModelMatch[1]) / 100;
+      const isStringed = ['80'].includes(packBucket) || (document.getElementById('actualVoltage').value && parseInt(document.getElementById('actualVoltage').value) > 48);
+      const expectedModules = isStringed ? baseModules * 2 : baseModules;
+      const statedModules = parseInt(modCountMatch[1]);
+      if (Number.isInteger(expectedModules) && expectedModules !== statedModules){
+        moduleWarn.style.display = 'block';
+        const formula = isStringed ? `${ahModelMatch[1]}Ah ÷ 100 × 2 (stringed)` : `${ahModelMatch[1]}Ah ÷ 100`;
+        moduleWarn.textContent = `⚠ Model: ${formula} = ${expectedModules} expected modules, but spec states ${statedModules} — mismatch, please review before finalizing.`;
+        issues.push(`Model/Module count mismatch: ${formula} = <b>${expectedModules}</b> expected, but spec's "# Modules" field states <b>${statedModules}</b>. Looks like an error in the source spec — verify which is correct.`);
+      }
+    }
+  }
+
+  const pnsTrigger = /p&s|parts\s*and\s*service/i.test(modulesVal) || /p&s|parts\s*and\s*service/i.test(raw);
+  const moduleFieldVal = find('module') || '';
+  let ahMatch = modulesVal.match(/(\d{2})\s*ah/i);
+  if (!ahMatch) ahMatch = moduleFieldVal.match(/(\d{2})\s*ah/i);
+  const cellCapFound = !!ahMatch;
+
+  const sohVal = find('soh framp', 'cell soh');
+  let sohFound = false, sohNonDefault = false;
+  if (sohVal){
+    const sohMatch = sohVal.match(/(\d+)/);
+    if (sohMatch){
+      document.getElementById('cellSoh').value = sohMatch[1];
+      sohFound = true;
+      if (parseInt(sohMatch[1]) !== 100) sohNonDefault = true;
+    }
+  }
+
+  const cvVal = find('cv', 'cv derate', 'cv setting');
+  let cvFound = false;
+  if (cvVal){
+    const cvMatch = cvVal.match(/(\d+)\s*%/);
+    if (cvMatch){ document.getElementById('cvSetting').value = cvMatch[1]; cvFound = true; }
+  }
+
+  const isPns = pnsTrigger || ahMatch || sohNonDefault;
+  if (isPns){
+    setRadio('sourceRow','source','pns');
+    if (ahMatch){
+      const ah = ahMatch[1];
+      setRadio('cellCapRow','cellCap', ah === '50' ? '50' : '60');
+    }
+  } else {
+    setRadio('sourceRow','source','production');
+  }
+
+  if (isPns && (!sohFound || !cvFound || !cellCapFound)){
+    const missing = [];
+    if (!cellCapFound) missing.push('Cell Capacity (50Ah/60Ah)');
+    if (!sohFound) missing.push('Cell SOH');
+    if (!cvFound) missing.push('CV Setting');
+    issues.push(`Used (P&S) modules detected, but no <b>${missing.join(', ')}</b> value was found in the pasted info. Check manually and enter the correct value(s).`);
+  }
+
+  const heaterVal = find('heater');
+  setRadio('heaterRow','heater', heaterVal && /yes/i.test(heaterVal) ? 'yes' : 'no');
+
+  const enclosureVal = find('enclosure') || find('powershelf') || '';
+  const modCount = modCountMatch ? parseInt(modCountMatch[1]) : null;
+  const harnessVal = find('harness') || '';
+  const layoutResult = detectLayout(enclosureVal, modelVal, modCount, harnessVal);
+  const heaterLayoutSel = document.getElementById('heaterLayout');
+  if (layoutResult.key){
+    heaterLayoutSel.value = layoutResult.key;
+  } else if (heaterVal && /yes/i.test(heaterVal)){
+    heaterLayoutSel.value = 'none';
+  }
+
+  const chargeVal = find('charge rate');
+  const chargeMatch = chargeVal ? chargeVal.match(/(\d+)/) : null;
+  if (chargeMatch) document.getElementById('chargeRate').value = chargeMatch[1];
+
+  const chargerVal = find('charger');
+  const chargerValLower = (chargerVal || '').toLowerCase();
+  const chargerSel = document.getElementById('charger');
+  if (/gebat|bassi/.test(chargerValLower)){
+    chargerSel.value = /dual/.test(chargerValLower) ? '4' : '3';
+  } else if (/bmid/.test(chargerValLower)){
+    chargerSel.value = /single port/.test(chargerValLower) ? '7' : '0';
+  } else if (/procorecan/.test(chargerValLower)){
+    chargerSel.value = '1';
+  } else if (/ieb/.test(chargerValLower)){
+    chargerSel.value = /dual/.test(chargerValLower) ? '5' : '2';
+  } else if (/procore jumpers/.test(chargerValLower)){
+    chargerSel.value = '6';
+  }
+
+  const ulVal = find('ul');
+  setRadio('ulRow','ul', ulVal && /yes/i.test(ulVal) ? 'yes' : 'no');
+
+  const powershelfVal = (find('powershelf') || '').toLowerCase();
+  if (/single/.test(powershelfVal)){
+    document.getElementById('ulPorts').value = '1';
+  } else if (/dual/.test(powershelfVal)){
+    document.getElementById('ulPorts').value = '2';
+  }
+  if (/schaltbau/.test(powershelfVal)){
+    document.getElementById('ulPortType').value = '2';
+  } else if (/euro/.test(powershelfVal)){
+    document.getElementById('ulPortType').value = '1';
+  }
+
+  const forkliftVal = (find('forklift oem') || '').toLowerCase();
+  const forkliftSel = document.getElementById('forkliftOem');
+  if (/crown/.test(forkliftVal)) forkliftSel.value = 'crown';
+  else if (/raymond/.test(forkliftVal)) forkliftSel.value = 'raymond';
+  else forkliftSel.value = 'other';
+  document.getElementById('regularCodeField').classList.toggle('show', forkliftSel.value === 'other');
+
+  const bmidVal = find('bmid');
+  const hygVal = find('hyg / crown', 'hyg/crown', 'hyg crown');
+  const hygValLower = (hygVal || '').toLowerCase();
+  const integrationDisabled = /do not enable/.test(hygValLower);
+  if (forkliftSel.value === 'other'){
+    let reg = '0';
+    if (integrationDisabled){
+      reg = '0';
+    } else if (/hyg/.test(hygValLower)) reg = '1';
+    else if (/motrec/.test(hygValLower)) reg = '2';
+    else if (/gvip/.test(hygValLower)) reg = '3';
+    document.getElementById('regularCode').value = reg;
+  }
+
+  const mandatoryMissing = [];
+  if (!idVal) mandatoryMissing.push('ID');
+  if (!vMatch) mandatoryMissing.push('Module Voltage (24/36/48/80/etc)');
+  if (!heaterVal) mandatoryMissing.push('Heater');
+  if (!modCountMatch) mandatoryMissing.push('Number of Modules');
+  if (!bmidVal) mandatoryMissing.push('BMID');
+  if (!hygVal) mandatoryMissing.push('Hyg/Crown');
+  if (!chargeMatch) mandatoryMissing.push('Charge Rate');
+  if (!chargerVal) mandatoryMissing.push('Charger');
+  if (!ulVal) mandatoryMissing.push('UL');
+  if (mandatoryMissing.length){
+    issues.unshift(`<b>Mandatory field(s) missing</b> from the pasted info: <b>${mandatoryMissing.join(', ')}</b>. These fields were left blank rather than defaulted — please fill them in manually before trusting this table.`);
+  }
+
+  if (issues.length){
+    const html = issues.map(i => `• ${i}`).join('<br><br>');
+    showWarningModal(mandatoryMissing.length ? 'Missing / Review Needed' : 'Review Needed', html);
+  }
+
+  document.getElementById('parseStatus').innerHTML = '<span style="color:var(--teal)">✓ Parsed — UL still needs your confirmation. Heater Config auto-finalizes for recognized layouts, flagged only if ambiguous.</span>';
+  onChange();
+}
+
+function onChange(){
+  document.getElementById('pnsFields').classList.toggle('show', state.source === 'pns');
+  document.getElementById('productionHint').style.display = state.source === 'pns' ? 'none' : 'block';
+  document.getElementById('ulFields').classList.toggle('show', state.ul === 'yes');
+  render();
+}
+
+function forkliftValue(){
+  const oem = document.getElementById('forkliftOem').value;
+  if (oem === 'crown') return {value:0, source:'EWS Code: Crown = 0'};
+  if (oem === 'raymond') return {value:1, source:'EWS Code: Raymond = 1'};
+  const reg = document.getElementById('regularCode').value;
+  const labels = {0:'n/a',1:'HYG',2:'Motrec',3:'GVIP'};
+  return {value:parseInt(reg), source:`Regular Code: ${labels[reg]} = ${reg}`};
+}
+
+function render(){
+  const client = document.getElementById('client').value || '—';
+  const serial = document.getElementById('serial').value || '—';
+  const modules = parseInt(document.getElementById('modules').value) || 0;
+  const chargeRateInput = document.getElementById('chargeRate').value;
+  const chargeRateMissing = !chargeRateInput;
+  const chargeRate = chargeRateInput ? parseInt(chargeRateInput) : 0;
+  const pack = state.pack;
+  const chargerSel = document.getElementById('charger');
+  const charger = chargerSel.value;
+
+  let cellCap, cvPoint, cellSoh, cvSetting;
+  if (state.source === 'production'){
+    cellCap = 60; cvPoint = 3925; cellSoh = 100; cvSetting = 100;
+  } else {
+    cellCap = parseInt(state.cellCap);
+    cvPoint = cellCap === 50 ? 3990 : 3925;
+    const sohInput = document.getElementById('cellSoh').value;
+    cellSoh = sohInput ? parseInt(sohInput) : null;
+    const cvInput = document.getElementById('cvSetting').value;
+    cvSetting = cvInput ? parseInt(cvInput) : 100;
+  }
+
+  const heaters = state.heater === 'yes';
+  const fk = forkliftValue();
+
+  const actualVInput = document.getElementById('actualVoltage').value;
+  const actualV = actualVInput ? parseInt(actualVInput) : parseInt(pack);
+  let modsPerString, mod1V, mod2V;
+  if (actualV === 24){
+    modsPerString = 1; mod1V = 24; mod2V = 24;
+  } else if (actualV <= 48){
+    modsPerString = 1; mod1V = 36; mod2V = 48;
+  } else if (actualV === 96){
+    modsPerString = 2; mod1V = 48; mod2V = 48;
+  } else {
+    modsPerString = 2; mod1V = 36; mod2V = 48;
+  }
+
+  const ulOn = state.ul === 'yes';
+  const ulResult = ulOn ? computeUlConfig() : null;
+
+  const heaterLayoutKey = document.getElementById('heaterLayout').value;
+  let heaterSuggestion = null;
+  if (heaters && heaterLayoutKey !== 'none' && HEATER_TABLE[heaterLayoutKey]){
+    const entry = HEATER_TABLE[heaterLayoutKey];
+    heaterSuggestion = {
+      value: entry.value, label: entry.label,
+      dcdc: entry.dcdcRule === 'always' ? '≥2' : (entry.dcdc || dcdcCount(modules)),
+      ambiguous: entry.ambiguous
+    };
+  }
+  const heaterFinal = heaterSuggestion && !heaterSuggestion.ambiguous;
+  const heaterFlagged = heaters && (!heaterSuggestion || heaterSuggestion.ambiguous);
+
+  const rows = [
+    ['AH_RETAIN', 0], ['AH_RETAIN_RAW', 0], ['ahlimit', 4294967295],
+    ['active_modules', modules], ['Serial', serial],
+    ['cancurrent', chargeRateMissing ? '— missing' : chargeRate, chargeRateMissing],
+    ['max_current', chargeRateMissing ? '— missing' : chargeRate, chargeRateMissing],
+    ['pack', pack], ['charger', charger], ['heaters', heaters ? 'TRUE' : 'FALSE'],
+    ['forklift', fk.value], ['can1_baud', 250],
+    ['cell_cap', cellCap], ['soc_warn', 10],
+    ['cell_soh', cellSoh === null ? '—' : cellSoh, cellSoh === null],
+    ['ul_config', ulOn ? ulResult.code : 0],
+    ['cv_point', cvPoint],
+    ['heater_config',
+      heaterFinal ? heaterSuggestion.value :
+      heaterSuggestion ? heaterSuggestion.value + ' (confirm)' :
+      (heaters ? '— select layout' : 0),
+      heaterFlagged],
+    ['CS_MAIN_BASE','Auto'], ['CS_MAIN_SCALE',25000], ['CS_ALT_BASE','Auto'], ['CS_ALT_SCALE',1885],
+    ['CS_HEAT_BASE',2470], ['CS_HEAT_SCALE',2330], ['CASEV_THRES',0],
+    ['lockout','FALSE'], ['soc_limit',100], ['vout',1], ['disable_alt','FALSE'],
+    ['cv_setting', cvSetting],
+  ];
+
+  const globalRows = [
+    ['MODS_PER_STRING', modsPerString], ['MOD_1_V', mod1V], ['MOD_2_V', mod2V],
+  ];
+
+  let html = `<div class="plate-frame"><div class="plate-inner">
+    <div class="plate-meta">${client} — Serial(s): ${serial}</div>
+    <div class="sheet"><table><tbody>
+    <tr class="hdr"><td class="k">Framp For ${pack}V ${chargeRateMissing ? '?' : chargeRate}A</td><td class="v" style="color:#000;">Values</td></tr>`;
+  rows.forEach(([k,v,flag])=>{
+    html += `<tr class="${flag?'flag':''}"><td class="k">${k}</td><td class="v">${v}</td></tr>`;
+  });
+  html += `<tr class="spacer"><td colspan="2"></td></tr>`;
+  html += `<tr class="hdr"><td class="k">Global Config</td><td class="v" style="color:#000;">Values</td></tr>`;
+  globalRows.forEach(([k,v])=>{
+    html += `<tr><td class="k">${k}</td><td class="v">${v}</td></tr>`;
+  });
+  html += `</tbody></table></div>`;
+
+  if (state.source === 'pns' && cellSoh === null){
+    html += `<div class="confirm-box"><div class="cb-title">Needs input</div><div class="cb-line">P&amp;S unit — <b>cell_soh</b> has no default and must be entered before this table is final.</div></div>`;
+  }
+  if (ulOn){
+    html += `<div class="confirm-box" style="border-color:var(--teal-dim); background:rgba(61,220,151,.06);"><div class="cb-title" style="color:var(--teal);">UL — reference detail</div>
+      <div class="cb-line"><b>ul_config = ${ulResult.code}</b>. Derated limits at ${modules} modules: Discharge <b>${ulResult.discharge}A</b> / Charge <b>${ulResult.charge}A</b>${ulResult.derated ? ' (derated below table max)' : ''}.${ulResult.note}</div></div>`;
+  }
+  if (heaters){
+    if (heaterFinal){
+      html += `<div class="confirm-box" style="border-color:var(--teal-dim); background:rgba(61,220,151,.06);"><div class="cb-title" style="color:var(--teal);">Heater Config — auto-finalized</div>
+        <div class="cb-line">Layout: <b>${heaterSuggestion.label}</b>, DCDC count: <b>${heaterSuggestion.dcdc}</b> → <b>heater_config = ${heaterSuggestion.value}</b>. Unambiguous layout, no confirmation needed.</div></div>`;
+    } else if (heaterSuggestion){
+      html += `<div class="confirm-box"><div class="cb-title">Heater Config — confirm before applying</div>
+        <div class="cb-line">Layout: <b>${heaterSuggestion.label}</b> is ambiguous from text/module count alone — the Core Layout image is needed to confirm between possible values. Best guess: <b>heater_config = ${heaterSuggestion.value}</b>.</div></div>`;
+    } else {
+      html += `<div class="confirm-box"><div class="cb-title">Heater Config — needs layout</div><div class="cb-line">Select an enclosure/core layout above to get a heater_config value.</div></div>`;
+    }
+  }
+
+  html += `</div></div>`;
+  document.getElementById('output').innerHTML = html;
+}
+
+async function copyTable(){
+  const client = document.getElementById('client').value || '';
+  const serial = document.getElementById('serial').value || '';
+  const tableEl = document.querySelector('#output table');
+  if (!tableEl) return;
+
+  const plainRows = Array.from(tableEl.querySelectorAll('tr')).map(tr=>
+    Array.from(tr.children).map(td=>td.textContent.trim()).join('\t')
+  );
+  const plainText = `Client: ${client}\nSerial(s): ${serial}\n\n` + plainRows.join('\n');
+
+  const clone = tableEl.cloneNode(true);
+  clone.style.borderCollapse = 'collapse';
+  clone.style.fontFamily = 'Calibri, Arial, sans-serif';
+  clone.style.fontSize = '14px';
+  clone.style.tableLayout = 'fixed';
+  clone.style.width = '455px';
+  clone.querySelectorAll('td').forEach(td=>{
+    td.style.border = '1px solid #000';
+    td.style.padding = '5px 10px';
+    td.style.background = '#fff';
+    td.style.color = '#000';
+  });
+  clone.querySelectorAll('td.k').forEach(td=>{
+    td.setAttribute('width', '255');
+    td.style.width = '255px';
+  });
+  clone.querySelectorAll('td.v').forEach(td=>{
+    td.setAttribute('width', '200');
+    td.style.width = '200px';
+  });
+  clone.querySelectorAll('tr.hdr td').forEach(td=>{
+    td.style.background = '#FFFF00';
+    td.style.fontWeight = '700';
+  });
+  clone.querySelectorAll('tr.flag td.v').forEach(td=>{
+    td.style.color = '#B7791F';
+    td.style.fontWeight = '700';
+  });
+  clone.querySelectorAll('tr.spacer td').forEach(td=>{
+    td.style.border = 'none';
+    td.style.background = 'transparent';
+  });
+
+  const colgroup = '<colgroup><col style="width:255px"><col style="width:200px"></colgroup>';
+  const htmlString = `<table style="border-collapse:collapse;table-layout:fixed;width:455px;font-family:Calibri,Arial,sans-serif;font-size:14px;">${colgroup}${clone.innerHTML}</table>`;
+
+  let success = false;
+
+  try{
+    const item = new ClipboardItem({
+      'text/html': new Blob([htmlString], {type:'text/html'}),
+      'text/plain': new Blob([plainText], {type:'text/plain'})
+    });
+    await navigator.clipboard.write([item]);
+    success = true;
+  } catch(err){ success = false; }
+
+  if (!success){
+    try{
+      const container = document.createElement('div');
+      container.style.position = 'fixed';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.setAttribute('contenteditable', 'true');
+      container.innerHTML = htmlString;
+      document.body.appendChild(container);
+      const range = document.createRange();
+      range.selectNodeContents(container);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      success = document.execCommand('copy');
+      sel.removeAllRanges();
+      document.body.removeChild(container);
+    } catch(err2){ success = false; }
+  }
+
+  if (!success){
+    try{ await navigator.clipboard.writeText(plainText); success = true; } catch(err3){ success = false; }
+  }
+
+  const t = document.getElementById('toast');
+  t.textContent = success ? 'Copied to clipboard' : 'Copy blocked — select the table and use Ctrl/Cmd+C';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+render();
+</script>
+</body>
+</html>
