@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stromcore Battery QC — Control Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #14171a; --panel: #1c2024; --panel-raised: #22262b;
+    --border: #2a2f34; --border-strong: #3a4148;
+    --text: #e8e6e1; --text-dim: #8b9199; --text-faint: #565c63;
+    --amber: #f2a900; --blue: #4d9fff; --success: #3ecf6e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; padding: 50px 24px 80px; }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  header { margin-bottom: 40px; text-align: center; }
+  .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--amber); margin: 0 0 10px; }
+  h1 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 34px; margin: 0 0 10px; letter-spacing: -0.01em; }
+  .sub { color: var(--text-dim); font-size: 15px; margin: 0; max-width: 520px; margin: 0 auto; line-height: 1.5; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 40px; }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 26px; text-decoration: none; color: var(--text); display: flex; flex-direction: column; gap: 10px; transition: border-color 0.2s, transform 0.15s, background 0.2s; position: relative; overflow: hidden; }
+  .card:hover { border-color: var(--amber); transform: translateY(-2px); background: var(--panel-raised); }
+  .card .icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .card .title { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px; }
+  .card .desc { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+  .card .tag { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-faint); margin-top: auto; padding-top: 10px; display: flex; align-items: center; gap: 6px; }
+  .card .tag .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .card .arrow { position: absolute; top: 24px; right: 24px; color: var(--text-faint); font-size: 16px; transition: transform 0.15s, color 0.2s; }
+  .card:hover .arrow { transform: translate(3px, -3px); color: var(--amber); }
+
+  .icon.framp { background: rgba(242,169,0,.12); color: var(--amber); }
+  .icon.box { background: rgba(255,199,44,.12); color: #ffc72c; }
+  .icon.qc { background: rgba(77,159,255,.12); color: var(--blue); }
+  .icon.master { background: rgba(62,207,110,.12); color: var(--success); }
+
+  footer { margin-top: 50px; font-size: 12px; color: var(--text-faint); text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Stromcore &middot; Production QC</p>
+    <h1>Battery QC Control Center</h1>
+    <p class="sub">Pick a tool below — each one opens on its own page. Serial number is the thread that ties them all together in the Master Dashboard.</p>
+  </header>
+
+  <div class="grid">
+    <a class="card" href="framp-generator.html" target="_blank" rel="noopener">
+      <div class="icon framp">FR</div>
+      <span class="arrow">↗</span>
+      <div class="title">Framp Table Generator</div>
+      <div class="desc">Paste battery info, get the correctly formatted Framp table — charger, forklift, heater config, UL, module count, all resolved automatically.</div>
+      <div class="tag"><span class="dot" style="background:var(--amber);"></span>Standalone · no sign-in needed</div>
+    </a>
+
+    <a class="card" href="box-accessories.html" target="_blank" rel="noopener">
+      <div class="icon box">BX</div>
+      <span class="arrow">↗</span>
+      <div class="title">Box Accessories Generator</div>
+      <div class="desc">Paste the same battery info, get the physical packing list — screen kit, jumpers, telemetry routing, HYG harness.</div>
+      <div class="tag"><span class="dot" style="background:#ffc72c;"></span>Standalone · no sign-in needed</div>
+    </a>
+
+    <a class="card" href="qc-tracker.html" target="_blank" rel="noopener">
+      <div class="icon qc">QC</div>
+      <span class="arrow">↗</span>
+      <div class="title">Battery QC Tracker</div>
+      <div class="desc">Enter a Serial and verify QC submission across all 7 production stages — Module, Powershelf, Closeup, System Testing, Telemetry, Packaging, Weight Study.</div>
+      <div class="tag"><span class="dot" style="background:var(--blue);"></span>Requires Google sign-in</div>
+    </a>
+
+    <a class="card" href="master-dashboard.html" target="_blank" rel="noopener">
+      <div class="icon master">MD</div>
+      <span class="arrow">↗</span>
+      <div class="title">Master Battery Dashboard</div>
+      <div class="desc">The full picture for one Serial — spec &amp; order details plus live QC pipeline status, pulled from every tool above.</div>
+      <div class="tag"><span class="dot" style="background:var(--success);"></span>Requires Google sign-in</div>
+    </a>
+  </div>
+
+  <footer>Battery QC Control Center · Stromcore · all tools live in this same repo</footer>
+</div>
+</body>
+</html>
