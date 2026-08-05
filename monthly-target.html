@@ -60,6 +60,14 @@
   .sum-dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
 
   .empty-state{ text-align:center; padding:40px 20px; color:var(--text-faint); font-size:13.5px; }
+
+  .grid-table{ width:100%; border-collapse:collapse; }
+  .grid-table th{ text-align:left; font-family:'JetBrains Mono', monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-faint); padding:6px 8px; }
+  .grid-table td{ padding:3px; }
+  .grid-table input{ width:100%; background:var(--panel-raised); border:1px solid var(--border-strong); border-radius:5px; padding:8px 10px; color:var(--text); font-family:'JetBrains Mono', monospace; font-size:13px; outline:none; box-sizing:border-box; }
+  .grid-table input:focus{ border-color: var(--blue); }
+  .icon-remove{ background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:14px; padding:4px 6px; }
+  .icon-remove:hover{ color: var(--danger); }
   footer { margin-top: 40px; font-size: 12px; color: var(--text-faint); text-align: center; }
 </style>
 </head>
@@ -78,15 +86,13 @@
   </header>
 
   <div class="panel">
-    <h2>Paste this month's list</h2>
-    <label>One client per line. List all their Serial numbers / ranges separated by commas, with the Client name once at the end. Serial ranges (e.g. 13521-13526) are expanded automatically. Tab-separated "Serials␉Client" also works.</label>
-    <textarea id="input" placeholder="13512-13520 BEK
-13521-13526, 13528-13529, 13531 BEK
-13554 Whirlpool TX
-13508	PCA Edmore MI"></textarea>
+    <h2>This month's list</h2>
+    <div class="hint" style="margin:0 0 12px;">Column 1: Serial or range (e.g. <b>13521-13526</b>). Use a comma for multiple ranges in one row — they'll all get that row's Client. Column 2: Client name. You can also paste a 2-column block copied straight from Excel/Sheets — click into the Serial cell where it should start, then paste.</div>
+    <div id="gridWrap"></div>
     <div class="row">
+      <button id="addRowBtn" onclick="addGridRow()">+ Add row</button>
       <button class="primary" id="parseBtn" onclick="parseInput()">Parse list</button>
-      <button id="clearBtn" onclick="document.getElementById('input').value=''; document.getElementById('previewWrap').style.display='none';">Clear</button>
+      <button id="clearBtn" onclick="resetGrid()">Clear</button>
     </div>
     <div class="hint">Parsing doesn't write anything yet — review the preview below, then click "Add to Registry" to actually save. Serials already in the Registry are skipped automatically, so this is safe to re-run on a list you've already added.</div>
   </div>
@@ -185,6 +191,54 @@ async function fetchExistingSerials(){
 }
 
 // ─── PARSING ─────────────────────────────────────────────────────────────────
+// ─── GRID INPUT ──────────────────────────────────────────────────────────────
+let gridRows = [];
+function initGrid(n){ gridRows = Array.from({length:n}, () => ({serial:'', client:''})); }
+initGrid(10);
+
+function escapeAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function renderGrid(){
+  const wrap = document.getElementById('gridWrap');
+  wrap.innerHTML = `<table class="grid-table"><thead><tr><th style="width:50%;">Serial / Range</th><th>Client</th><th style="width:32px;"></th></tr></thead><tbody>` +
+    gridRows.map((r, i) => `
+      <tr>
+        <td><input type="text" value="${escapeAttr(r.serial)}" placeholder="e.g. 13521-13526 or 13531, 13540" oninput="updateGridCell(${i},'serial',this.value)" onpaste="handleGridPaste(event,${i},'serial')"></td>
+        <td><input type="text" value="${escapeAttr(r.client)}" placeholder="e.g. BEK" oninput="updateGridCell(${i},'client',this.value)" onpaste="handleGridPaste(event,${i},'client')"></td>
+        <td><button class="icon-remove" onclick="removeGridRow(${i})" title="Remove row">✕</button></td>
+      </tr>`).join('') +
+    `</tbody></table>`;
+}
+renderGrid();
+
+function updateGridCell(i, col, val){ gridRows[i][col] = val; }
+function addGridRow(){ gridRows.push({serial:'', client:''}); renderGrid(); }
+function removeGridRow(i){ gridRows.splice(i,1); if (gridRows.length === 0) gridRows.push({serial:'', client:''}); renderGrid(); }
+function resetGrid(){ initGrid(10); renderGrid(); document.getElementById('previewWrap').style.display='none'; }
+
+// Lets you paste a 2-column block copied straight from Excel/Sheets — starting cell determines where it lands.
+function handleGridPaste(e, rowIdx, col){
+  const text = (e.clipboardData || window.clipboardData).getData('text');
+  if (!text || !/[\t\n]/.test(text)) return; // single value — let the browser's default single-cell paste happen
+  e.preventDefault();
+
+  let lines = text.replace(/\r/g, '').split('\n');
+  while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+
+  lines.forEach((line, i) => {
+    const cells = line.split('\t');
+    const targetRow = rowIdx + i;
+    while (gridRows.length <= targetRow) gridRows.push({serial:'', client:''});
+    if (col === 'serial'){
+      if (cells[0] !== undefined) gridRows[targetRow].serial = cells[0].trim();
+      if (cells[1] !== undefined) gridRows[targetRow].client = cells[1].trim();
+    } else {
+      if (cells[0] !== undefined) gridRows[targetRow].client = cells[0].trim();
+    }
+  });
+  renderGrid();
+}
+
 function expandSerialToken(token){
   const t = token.trim();
   const range = t.match(/^(\d+)\s*-\s*(\d+)$/);
@@ -200,42 +254,11 @@ function expandSerialToken(token){
   return null; // not a valid serial token
 }
 
-function parseLine(line){
-  line = line.trim();
-  if (!line) return null;
-
-  // Tab-separated still works as an explicit override: "13521-13526, 13528-13529\tBEK"
-  const tabParts = line.split('\t').map(s=>s.trim()).filter(Boolean);
-  if (tabParts.length >= 2){
-    const serialTokens = tabParts[0].split(',').map(s=>s.trim()).filter(Boolean);
-    return { serialTokens, client: tabParts.slice(1).join(' ').trim() };
-  }
-
-  // Primary format: one or more comma-separated serial/range tokens, with the client name
-  // appearing only once, trailing after the LAST token — e.g.
-  // "13521-13526, 13528-13529, 13531 BEK" -> tokens [13521-13526, 13528-13529, 13531], client "BEK"
-  const commaParts = line.split(',').map(s => s.trim()).filter(Boolean);
-  if (commaParts.length === 0) return null;
-
-  const lastPart = commaParts[commaParts.length - 1];
-  const m = lastPart.match(/^(\d+\s*-\s*\d+|\d+)\s+(.+)$/);
-  if (!m) return null; // no client name found trailing the last serial/range token
-
-  const lastToken = m[1].replace(/\s+/g, '');
-  const client = m[2].replace(/^-+\s*/, '').trim(); // strip a stray leading "-" for backward compat with old "SERIAL - CLIENT" style
-
-  const serialTokens = commaParts.slice(0, -1).map(t => t.replace(/\s+/g, ''));
-  serialTokens.push(lastToken);
-
-  return { serialTokens, client };
-}
-
 let currentEntries = []; // { serial, client, status }
 
 async function parseInput(){
-  const raw = document.getElementById('input').value;
-  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
-  if (lines.length === 0) return;
+  const nonEmptyRows = gridRows.filter(r => (r.serial || '').trim());
+  if (nonEmptyRows.length === 0) return;
 
   document.getElementById('parseBtn').disabled = true;
   document.getElementById('parseBtn').textContent = 'Parsing...';
@@ -246,14 +269,15 @@ async function parseInput(){
     if (!existingSerials) existingSerials = await fetchExistingSerials();
 
     const entries = [];
-    lines.forEach(line => {
-      const parsed = parseLine(line);
-      if (!parsed){ entries.push({ serial: line, client: '', status: 'invalid' }); return; }
-      parsed.serialTokens.forEach(token => {
+    nonEmptyRows.forEach(r => {
+      const client = (r.client || '').trim();
+      const tokens = r.serial.split(',').map(t => t.trim()).filter(Boolean);
+      tokens.forEach(token => {
         const expanded = expandSerialToken(token);
-        if (!expanded){ entries.push({ serial: token, client: parsed.client, status: 'invalid' }); return; }
+        if (!expanded){ entries.push({ serial: token, client, status: 'invalid' }); return; }
+        if (!client){ expanded.forEach(s => entries.push({ serial: s, client: '', status: 'invalid' })); return; }
         expanded.forEach(s => {
-          entries.push({ serial: s, client: parsed.client, status: existingSerials.has(s) ? 'exists' : 'new' });
+          entries.push({ serial: s, client, status: existingSerials.has(s) ? 'exists' : 'new' });
         });
       });
     });
