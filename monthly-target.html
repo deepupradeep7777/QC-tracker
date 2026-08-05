@@ -79,11 +79,11 @@
 
   <div class="panel">
     <h2>Paste this month's list</h2>
-    <label>One unit per line — Serial and Client, separated by a tab, comma, or dash. Serial ranges (e.g. 13521-13532) are expanded automatically.</label>
-    <textarea id="input" placeholder="13554	Whirlpool TX
-13521-13532	Ben E Keith TX
-13508, PCA Edmore MI
-13560 - Prysmian Abbeville SC"></textarea>
+    <label>One client per line. List all their Serial numbers / ranges separated by commas, with the Client name once at the end. Serial ranges (e.g. 13521-13526) are expanded automatically. Tab-separated "Serials␉Client" also works.</label>
+    <textarea id="input" placeholder="13512-13520 BEK
+13521-13526, 13528-13529, 13531 BEK
+13554 Whirlpool TX
+13508	PCA Edmore MI"></textarea>
     <div class="row">
       <button class="primary" id="parseBtn" onclick="parseInput()">Parse list</button>
       <button id="clearBtn" onclick="document.getElementById('input').value=''; document.getElementById('previewWrap').style.display='none';">Clear</button>
@@ -201,17 +201,33 @@ function expandSerialToken(token){
 }
 
 function parseLine(line){
-  // Try tab, then " - ", then ",", in that order
-  let parts = line.split('\t').map(s=>s.trim()).filter(Boolean);
-  if (parts.length < 2){
-    const dashMatch = line.match(/^(.+?)\s+-\s+(.+)$/);
-    if (dashMatch) parts = [dashMatch[1].trim(), dashMatch[2].trim()];
+  line = line.trim();
+  if (!line) return null;
+
+  // Tab-separated still works as an explicit override: "13521-13526, 13528-13529\tBEK"
+  const tabParts = line.split('\t').map(s=>s.trim()).filter(Boolean);
+  if (tabParts.length >= 2){
+    const serialTokens = tabParts[0].split(',').map(s=>s.trim()).filter(Boolean);
+    return { serialTokens, client: tabParts.slice(1).join(' ').trim() };
   }
-  if (parts.length < 2){
-    parts = line.split(',').map(s=>s.trim()).filter(Boolean);
-  }
-  if (parts.length < 2) return null;
-  return { serialRaw: parts[0], client: parts.slice(1).join(' ').trim() };
+
+  // Primary format: one or more comma-separated serial/range tokens, with the client name
+  // appearing only once, trailing after the LAST token — e.g.
+  // "13521-13526, 13528-13529, 13531 BEK" -> tokens [13521-13526, 13528-13529, 13531], client "BEK"
+  const commaParts = line.split(',').map(s => s.trim()).filter(Boolean);
+  if (commaParts.length === 0) return null;
+
+  const lastPart = commaParts[commaParts.length - 1];
+  const m = lastPart.match(/^(\d+\s*-\s*\d+|\d+)\s+(.+)$/);
+  if (!m) return null; // no client name found trailing the last serial/range token
+
+  const lastToken = m[1].replace(/\s+/g, '');
+  const client = m[2].replace(/^-+\s*/, '').trim(); // strip a stray leading "-" for backward compat with old "SERIAL - CLIENT" style
+
+  const serialTokens = commaParts.slice(0, -1).map(t => t.replace(/\s+/g, ''));
+  serialTokens.push(lastToken);
+
+  return { serialTokens, client };
 }
 
 let currentEntries = []; // { serial, client, status }
@@ -233,10 +249,12 @@ async function parseInput(){
     lines.forEach(line => {
       const parsed = parseLine(line);
       if (!parsed){ entries.push({ serial: line, client: '', status: 'invalid' }); return; }
-      const expanded = expandSerialToken(parsed.serialRaw);
-      if (!expanded){ entries.push({ serial: parsed.serialRaw, client: parsed.client, status: 'invalid' }); return; }
-      expanded.forEach(s => {
-        entries.push({ serial: s, client: parsed.client, status: existingSerials.has(s) ? 'exists' : 'new' });
+      parsed.serialTokens.forEach(token => {
+        const expanded = expandSerialToken(token);
+        if (!expanded){ entries.push({ serial: token, client: parsed.client, status: 'invalid' }); return; }
+        expanded.forEach(s => {
+          entries.push({ serial: s, client: parsed.client, status: existingSerials.has(s) ? 'exists' : 'new' });
+        });
       });
     });
 
