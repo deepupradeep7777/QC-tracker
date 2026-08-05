@@ -6,6 +6,7 @@
 <title>Box Accessories Generator — Stromcore</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --bg: #14161a;
@@ -69,10 +70,17 @@
 
   .empty-state{ color:var(--text-dim); font-size:13px; padding:30px 10px; text-align:center; border:1px dashed var(--line); border-radius:8px; }
 
-  .sysnum-grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap:8px; margin-bottom:20px; }
+  .sysnum-grid{ display:flex; flex-direction:column; gap:8px; margin-bottom:20px; max-width:280px; }
   .sysnum{ display:flex; align-items:center; gap:8px; background:#191c20; border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
   .sysnum input[type=checkbox]{ width:16px; height:16px; accent-color:var(--amber); cursor:pointer; flex-shrink:0; }
   .sysnum label{ font-family:var(--font-mono); font-size:13px; }
+  .sysnum .resolved{ font-family:var(--font-mono); font-size:11px; color:var(--text-dim); margin-left:auto; }
+  .sysnum .resolved .missing{ color:var(--warn); }
+
+  .sheets-connect{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .sheets-status{ font-size:12px; color:var(--text-dim); font-family:var(--font-mono); }
+  .sheets-status.connected{ color:var(--ok, #55c9a8); }
+  .sheets-status.error{ color:var(--warn); }
 
   .toast{ position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(8px); background:var(--amber); color:#161616; font-weight:600; font-size:13px; padding:10px 18px; border-radius:6px; opacity:0; pointer-events:none; transition:opacity .2s ease, transform .2s ease; z-index:999; }
   .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
@@ -101,6 +109,15 @@
       <h1>Box Accessories Generator</h1>
       <div class="sub">Paste the battery info → get the packing list of items that ship with that unit</div>
     </div>
+  </div>
+
+  <div class="panel" id="sheetsPanel">
+    <h2>Serial Number Lookup</h2>
+    <div class="sheets-connect">
+      <button class="ghost" id="connectSheetsBtn">Connect Google Sheets</button>
+      <span class="sheets-status" id="sheetsStatus">Not connected</span>
+    </div>
+    <div class="hint" style="margin-top:0;">Pulls Wifi serial (Telemetry sheet, col C→A) and OBT/Cloudlink serials (OBT/Cloudlink tabs, col B→A) by system number. Requires Google sign-in — only works once this file is hosted on an authorized domain (e.g. your GitHub Pages repo), not inside this chat preview.</div>
   </div>
 
   <div class="panel" id="inputPanel">
@@ -142,6 +159,96 @@ UL: No"></textarea>
 <div class="toast" id="toast"></div>
 
 <script>
+/* ============================= Google Sheets lookup (OAuth) ============================= */
+/* Shared OAuth client — same one used by the Framp Generator / Master Dashboard / Monthly Target tools. */
+const SHEETS_CLIENT_ID = '1848041462-n1kcsireto5o27u8cptuee6riofm44o3.apps.googleusercontent.com';
+const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+
+const TELEMETRY_SHEET_ID = '1tXkFNE4i8wXavmdJLSq8t4iW_sXLVE9bes1j1h6nSo4';
+const TELEMETRY_RANGE = 'A:C'; /* Telemetry sheet: system # in C, wifi serial in A — confirmed */
+const TELEMETRY_SYSNUM_COL = 2; /* column C, 0-indexed */
+const TELEMETRY_SERIAL_COL = 0; /* column A, 0-indexed */
+
+const OBT_CLOUDLINK_SHEET_ID = '1B97b7JXDSEh2j3mGHUME-w9S22RusXXwUWaj-f4niCk';
+const OBT_TAB = 'OBT';
+const CLOUDLINK_TAB = 'Cloudlink';
+const OBT_RANGE = OBT_TAB + '!A:B';
+const CLOUDLINK_RANGE = CLOUDLINK_TAB + '!A:B';
+const OBTCL_SYSNUM_COL = 1; /* column B, 0-indexed — confirmed for both OBT and Cloudlink tabs */
+const OBTCL_SERIAL_COL = 0; /* column A, 0-indexed — confirmed for both OBT and Cloudlink tabs */
+
+let sheetsAccessToken = null;
+let telemetryLookup = {};  /* system# -> wifi serial */
+let obtLookup = {};        /* system# -> obt serial */
+let cloudlinkLookup = {};  /* system# -> cloudlink serial */
+let sheetsTokenClient = null;
+
+function setSheetsStatus(text, cls){
+  const el = document.getElementById('sheetsStatus');
+  el.textContent = text;
+  el.className = 'sheets-status' + (cls? ' '+cls : '');
+}
+
+function rowsToLookup(rows, sysnumCol, serialCol){
+  const map = {};
+  if(!rows) return map;
+  rows.forEach(row=>{
+    const sysnum = (row[sysnumCol]||'').toString().trim();
+    const serial = (row[serialCol]||'').toString().trim();
+    if(sysnum) map[sysnum] = serial;
+  });
+  return map;
+}
+
+async function fetchSheetRange(spreadsheetId, range, token){
+  const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + spreadsheetId + '/values/' + encodeURIComponent(range);
+  const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+  if(!res.ok) throw new Error('Sheets API error ' + res.status + ' for ' + range);
+  const data = await res.json();
+  return data.values || [];
+}
+
+async function loadLookupData(token){
+  setSheetsStatus('Loading serial data…');
+  try{
+    const [teleRows, obtRows, cloudlinkRows] = await Promise.all([
+      fetchSheetRange(TELEMETRY_SHEET_ID, TELEMETRY_RANGE, token),
+      fetchSheetRange(OBT_CLOUDLINK_SHEET_ID, OBT_RANGE, token),
+      fetchSheetRange(OBT_CLOUDLINK_SHEET_ID, CLOUDLINK_RANGE, token)
+    ]);
+    telemetryLookup = rowsToLookup(teleRows, TELEMETRY_SYSNUM_COL, TELEMETRY_SERIAL_COL);
+    obtLookup = rowsToLookup(obtRows, OBTCL_SYSNUM_COL, OBTCL_SERIAL_COL);
+    cloudlinkLookup = rowsToLookup(cloudlinkRows, OBTCL_SYSNUM_COL, OBTCL_SERIAL_COL);
+    setSheetsStatus('Connected — ' + Object.keys(telemetryLookup).length + ' Wifi, ' + Object.keys(obtLookup).length + ' OBT, ' + Object.keys(cloudlinkLookup).length + ' Cloudlink serials loaded', 'connected');
+    if(lastResult) renderOutput(lastResult, lastMeta);
+  }catch(e){
+    console.error(e);
+    setSheetsStatus('Failed to load sheet data — check console / sharing permissions', 'error');
+  }
+}
+
+function initSheetsAuth(){
+  if(typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2){
+    setSheetsStatus('Google sign-in unavailable in this preview — host on an authorized domain', 'error');
+    return;
+  }
+  sheetsTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: SHEETS_CLIENT_ID,
+    scope: SHEETS_SCOPE,
+    callback: (resp)=>{
+      if(resp.error){ setSheetsStatus('Sign-in failed: ' + resp.error, 'error'); return; }
+      sheetsAccessToken = resp.access_token;
+      loadLookupData(sheetsAccessToken);
+    }
+  });
+}
+
+document.getElementById('connectSheetsBtn').addEventListener('click', ()=>{
+  if(!sheetsTokenClient){ initSheetsAuth(); }
+  if(!sheetsTokenClient){ return; }
+  sheetsTokenClient.requestAccessToken();
+});
+
 /* ============================= parsing ============================= */
 function parseSpec(text){
   const lines = text.split('\n').map(l=>l.replace(/\r$/,'')).filter(l=>l.trim().length>0);
@@ -256,7 +363,7 @@ function buildPackingList(fields){
     }
   }
 
-  /* 4. Telemetry / OBT / Cloudlink */
+  /* 4. Telemetry / OBT / Cloudlink — "Wifi" is the base telemetry type: Telemetry + Telemetry harness. OBT is its own special case. Cloudlink layers on top of either. */
   {
     const hasObt = has(telemetry,'obt');
     const hasWifi = has(telemetry,'wifi');
@@ -286,7 +393,7 @@ function buildPackingList(fields){
     }
   }
 
-  /* 5. HYG / Crown harness */
+  /* 5. HYG / Crown harness — mutually exclusive; straight vs 90° driven by enclosure either way */
   if(!isBlankish(hygCrown)){
     const is90 = has(enclosure,'1C30')||has(enclosure,'2C30')||has(enclosure,'2C29')||has(enclosure,'Short 3C')||has(enclosure,'3C Short');
     if(has(hygCrown,'hyg')){
@@ -298,7 +405,7 @@ function buildPackingList(fields){
     }
   }
 
-  /* 6. Latch and Instructions */
+  /* 6. Latch and Instructions — include when battery info actually mentions it; for PCA, default to including it ONLY when no latch info is given at all. An explicit N/A/No excludes it even for PCA. */
   {
     const client = getField(fields,'Client');
     const site = getField(fields,'Customer Site');
@@ -311,6 +418,7 @@ function buildPackingList(fields){
     } else if(isPCA && !latchField){
       add('Packaging', 'Latch and Instructions', 'Included by default for PCA orders — no latch info given');
     }
+    /* else: non-PCA with no/blank latch info, or PCA explicitly marked N/A/No — excluded */
   }
 
   return { categories };
@@ -350,13 +458,33 @@ function renderOutput(result, meta){
   if(serials.length>0){
     html += '<div class="cat"><h3>System Numbers</h3><div class="sysnum-grid">';
     serials.forEach((s,i)=>{
-      html += '<div class="sysnum"><input type="checkbox" id="sn'+i+'"><label for="sn'+i+'">'+escapeHtml(s)+'</label></div>';
+      html += '<div class="sysnum"><input type="checkbox" id="sn'+i+'"><label for="sn'+i+'">'+escapeHtml(s)+'</label>' + resolvedSerialHtml(s, meta) + '</div>';
     });
     html += '</div></div>';
   }
 
   container.innerHTML = html;
   document.getElementById('outputActions').style.display = (result.categories.length || serials.length) ? 'flex' : 'none';
+}
+
+function resolvedSerialHtml(sysnum, meta){
+  const parts = [];
+  const noneLoaded = Object.keys(telemetryLookup).length===0 && Object.keys(obtLookup).length===0 && Object.keys(cloudlinkLookup).length===0;
+  if(noneLoaded) return '<span class="resolved">Connect Sheets to resolve</span>';
+  if(meta.hasWifi){
+    const v = telemetryLookup[sysnum];
+    parts.push(v ? ('Wifi: '+v) : '<span class="missing">Wifi: not found</span>');
+  }
+  if(meta.hasObt){
+    const v = obtLookup[sysnum];
+    parts.push(v ? ('OBT: '+v) : '<span class="missing">OBT: not found</span>');
+  }
+  if(meta.hasCloudlink){
+    const v = cloudlinkLookup[sysnum];
+    parts.push(v ? ('Cloudlink: '+v) : '<span class="missing">Cloudlink: not found</span>');
+  }
+  if(parts.length===0) return '';
+  return '<span class="resolved">'+parts.join(' · ')+'</span>';
 }
 
 function escapeHtml(s){
@@ -407,6 +535,14 @@ async function copyList(){
   try{ document.execCommand('copy'); showToast('Copied as plain text'); } catch(e){ showToast('Copy failed — select manually'); }
   document.body.removeChild(ta);
 }
+function resolvedSerialPlain(sysnum, meta){
+  const parts = [];
+  if(meta.hasWifi){ const v = telemetryLookup[sysnum]; parts.push('Wifi: ' + (v || 'not found')); }
+  if(meta.hasObt){ const v = obtLookup[sysnum]; parts.push('OBT: ' + (v || 'not found')); }
+  if(meta.hasCloudlink){ const v = cloudlinkLookup[sysnum]; parts.push('Cloudlink: ' + (v || 'not found')); }
+  return parts.join(' · ');
+}
+
 function buildPrintDoc(result, meta){
   const serials = expandIds(meta.ids);
   let itemsHtml = '';
@@ -421,7 +557,8 @@ function buildPrintDoc(result, meta){
   if(serials.length>0){
     sysHtml += '<h3>System Numbers</h3><div class="psys">';
     serials.forEach(s=>{
-      sysHtml += '<div class="psys-item"><span class="pbox"></span>'+escapeHtml(s)+'</div>';
+      const resolvedText = resolvedSerialPlain(s, meta);
+      sysHtml += '<div class="psys-item"><span class="pbox"></span>'+escapeHtml(s)+(resolvedText? ' — '+escapeHtml(resolvedText):'')+'</div>';
     });
     sysHtml += '</div>';
   }
@@ -435,7 +572,7 @@ function buildPrintDoc(result, meta){
     'table.ptable td{ padding:5px 4px; border-bottom:1px solid #ddd; font-size:13px; vertical-align:top; }' +
     'td.pname{ font-weight:600; width:55%; }' +
     'td.pnote{ color:#555; }' +
-    '.psys{ display:flex; flex-wrap:wrap; gap:10px; margin-top:6px; }' +
+    '.psys{ display:flex; flex-direction:column; gap:8px; margin-top:6px; max-width:220px; }' +
     '.psys-item{ display:flex; align-items:center; gap:6px; font-family:monospace; font-size:13px; border:1px solid #999; border-radius:4px; padding:6px 10px; }' +
     '.pbox{ width:13px; height:13px; border:1.5px solid #333; display:inline-block; }' +
     '@media print{ body{ margin:12mm; } .no-print{ display:none !important; } }' +
@@ -471,10 +608,14 @@ document.getElementById('generateBtn').addEventListener('click', ()=>{
   const { fields } = parseSpec(text);
   const result = buildPackingList(fields);
   lastResult = result;
+  const telemetryVal = getField(fields,'Telemetry');
   lastMeta = {
     client: getField(fields,'Client') || getField(fields,'Customer Site') || 'Packing List',
     site: getField(fields,'Customer Site') || '',
-    ids: getField(fields,'ID#s') || ''
+    ids: getField(fields,'ID#s') || '',
+    hasWifi: has(telemetryVal,'wifi'),
+    hasObt: has(telemetryVal,'obt'),
+    hasCloudlink: has(telemetryVal,'cloudlink')
   };
   renderOutput(result, lastMeta);
 });
