@@ -144,7 +144,13 @@
       <span class="cache-dot" id="cacheDot"></span>
       <span id="cacheText">Sign in first, then load sheets.</span>
     </div>
-    <button class="refresh-btn" id="refreshBtn" onclick="loadAllSheets()" disabled>⟳ Load Sheets</button>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <div class="view-toggle" style="margin:0;">
+        <button class="view-btn active" id="btnModeSynced" onclick="switchDashboardMode('synced')" title="Fast — reads one sheet, updated by the background sync">⚡ Synced (1 sheet)</button>
+        <button class="view-btn" id="btnModeLive" onclick="switchDashboardMode('live')" title="Slower — checks all 7 QC sheets live, use if sync hasn't run yet">🔍 Live Check (8 sheets)</button>
+      </div>
+      <button class="refresh-btn" id="refreshBtn" onclick="loadAllSheets()" disabled>⟳ Load Sheets</button>
+    </div>
   </div>
 
   <div class="view-toggle">
@@ -303,10 +309,12 @@ async function loadAllSheets() {
   setCacheUI('loading', 'Loading sheets...');
   document.getElementById('searchBtn').disabled = true;
 
-  const toLoad = [{ fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AF' }];
-  for (const stage of STAGES) {
-    toLoad.push({ fileId: stage.fileId, sheetName: stage.sheetName || 'Sheet1', colRange: stage.colRange || null });
-    if (stage.systestFileId) toLoad.push({ fileId: stage.systestFileId, sheetName: stage.systestSheetName || 'Sheet1', colRange: null });
+  const toLoad = [{ fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AH' }];
+  if (dashboardMode === 'live') {
+    for (const stage of STAGES) {
+      toLoad.push({ fileId: stage.fileId, sheetName: stage.sheetName || 'Sheet1', colRange: stage.colRange || null });
+      if (stage.systestFileId) toLoad.push({ fileId: stage.systestFileId, sheetName: stage.systestSheetName || 'Sheet1', colRange: null });
+    }
   }
   const unique = toLoad.filter((v, i, a) => a.findIndex(x => x.fileId === v.fileId && x.sheetName === v.sheetName) === i);
 
@@ -587,6 +595,53 @@ async function checkStage(stage, serial) {
 }
 
 // ─── SEARCH ──────────────────────────────────────────────────────────────────
+let dashboardMode = 'synced'; // 'synced' = read AG/AH from Registry (1 sheet); 'live' = check all 7 stage sheets directly
+
+function switchDashboardMode(mode) {
+  dashboardMode = mode;
+  document.getElementById('btnModeSynced').classList.toggle('active', mode === 'synced');
+  document.getElementById('btnModeLive').classList.toggle('active', mode === 'live');
+  // Sheets loaded under one mode aren't sufficient for the other (synced only pulls Registry,
+  // live pulls Registry + 7 more) — force a reload so the right data is actually in cache.
+  cacheLoadedAt = null;
+  Object.keys(sheetCache).forEach(k => delete sheetCache[k]);
+  setCacheUI('', 'Mode changed — click Load Sheets again.');
+  document.getElementById('searchBtn').disabled = true;
+}
+
+// Maps the Apps Script sync's stage names (in the AG summary text) to this page's STAGES ids/labels/tags.
+const SYNCED_STAGE_MAP = {
+  Module: 'module', Weight: 'weight', Powershelf: 'powershelf', Closeup: 'closeup',
+  SystemTest: 'systest', Telemetry: 'telemetry', Packaging: 'packaging'
+};
+
+function renderSyncedStages(summaryText, syncedAt) {
+  if (!summaryText) {
+    STAGES.forEach(s => setStageUI(s.id, 'inactive', 'Not synced yet', 'Run the QC Sync Apps Script, or switch to Live Check.', null));
+    return;
+  }
+  const lines = summaryText.split('\n');
+  lines.forEach(line => {
+    const m = line.match(/^(\w+):\s*(PASS|FAIL|MISSING)\s*\((.*)\)$/);
+    if (!m) return; // covers the trailing "Overall: X" line too, which has no stage id
+    const stageId = SYNCED_STAGE_MAP[m[1]];
+    if (!stageId) return;
+    const status = m[2], detail = m[3];
+    const state = status === 'PASS' ? 'pass' : 'fail';
+    const statusText = status === 'MISSING' ? 'Missing' : status === 'PASS' ? 'Submitted' : 'Issue';
+    setStageUI(stageId, state, statusText, '', detail);
+  });
+  const overallMatch = summaryText.match(/Overall:\s*(\S+.*)$/m);
+  const syncNote = document.getElementById('syncNote') || (() => {
+    const el = document.createElement('div');
+    el.id = 'syncNote';
+    el.style.cssText = 'margin:12px 0; font-family:JetBrains Mono, monospace; font-size:12px; color:var(--text-dim);';
+    document.getElementById('stages').parentElement.insertAdjacentElement('afterend', el);
+    return el;
+  })();
+  syncNote.textContent = (overallMatch ? `Overall: ${overallMatch[1]} · ` : '') + (syncedAt ? `Last synced: ${syncedAt}` : 'Not yet synced');
+}
+
 async function runSearch() {
   const input = document.getElementById('serialInput');
   const serial = input.value.trim();
@@ -597,8 +652,30 @@ async function runSearch() {
   document.getElementById('resultsWrap').style.display = 'block';
   document.getElementById('searchBtn').disabled = true;
 
-  renderSpec(normalizeTarget(serial), serial);
+  const target = normalizeTarget(serial);
+  renderSpec(target, serial);
 
+  if (dashboardMode === 'synced') {
+    const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
+    const rows = sheetCache[key];
+    let summary = '', syncedAt = '';
+    if (rows) {
+      const statusIdx = REGISTRY_COLS.indexOf('Target Month') + 1; // AG comes right after Target Month (AF)
+      const syncedIdx = statusIdx + 1;
+      for (let i = 1; i < rows.length; i++) {
+        const s = normalizeTarget(rows[i][0] || '');
+        if (s !== target) continue;
+        summary = rows[i][statusIdx] || '';
+        syncedAt = rows[i][syncedIdx] || '';
+        break;
+      }
+    }
+    renderSyncedStages(summary, syncedAt);
+    document.getElementById('searchBtn').disabled = false;
+    return;
+  }
+
+  // Live mode — original behavior, checks all 7 stage sheets directly.
   for (let i = 0; i < STAGES.length; i += 2) {
     await Promise.all(STAGES.slice(i, i + 2).map(s => checkStage(s, serial)));
   }
