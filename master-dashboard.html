@@ -62,6 +62,16 @@
   .spec-flags { margin-top: 16px; background: var(--amber-dim); border: 1px solid var(--amber); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; color: var(--amber); }
   .spec-empty { text-align: center; padding: 30px 20px; color: var(--text-faint); font-size: 13.5px; }
 
+  .cc-row { display: grid; grid-template-columns: 130px 1fr 1fr 90px; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 6px; background: var(--panel-raised); border: 1px solid var(--border); margin-bottom: 8px; }
+  .cc-row .cc-label { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); }
+  .cc-row .cc-val { font-size: 13.5px; }
+  .cc-row .cc-val .cc-caption { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; text-transform: uppercase; color: var(--text-faint); display: block; margin-bottom: 2px; }
+  .cc-badge { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 4px 10px; border-radius: 12px; text-transform: uppercase; text-align: center; }
+  .cc-badge.match { background: var(--success-dim); color: var(--success); }
+  .cc-badge.mismatch { background: var(--danger-dim); color: var(--danger); }
+  .cc-badge.nodata { background: var(--panel); color: var(--text-faint); border: 1px solid var(--border-strong); }
+  .cc-note { grid-column: 1 / -1; font-size: 11.5px; color: var(--amber); margin-top: 2px; }
+
   /* Stage pipeline (reused pattern from QC Tracker) */
   .line-wrap { position: relative; margin-bottom: 36px; }
   .line-track { position: absolute; top: 34px; left: 34px; right: 34px; height: 2px; background: var(--border); z-index: 0; }
@@ -197,6 +207,9 @@
     <div class="section-title">Spec &amp; Order Details <span class="badge">Master Battery Registry</span></div>
     <div class="spec-panel" id="specPanel"></div>
 
+    <div class="section-title">Cross-Verification <span class="badge">Framp spec vs. System Testing QC</span></div>
+    <div class="spec-panel" id="crossCheckPanel"></div>
+
     <div class="section-title">QC Pipeline <span class="badge">7 stages · live from production sheets</span></div>
     <div class="line-wrap">
       <div class="line-track"></div>
@@ -230,6 +243,18 @@ const REGISTRY_COLS = [
   'Telemetry Type','Screen','Discharge Jumpers','Charge Jumpers','Packaging','Flags/Warnings at Creation',
   'Target Month'
 ];
+
+// Real System Testing QC form (full responses, not the trimmed lookup sheet) — used to cross-verify
+// Module Count, Charge Rate, HYG/Crown, and Voltage against what Framp generated.
+const SYSTEST_QC = {
+  fileId: '1bEEB1iY6DkPuk4N_UzEWSoamF8BRSYzuN12w_rKsmlM',
+  sheetName: 'In active (3rd june 2026)'
+};
+// 0-indexed column positions, confirmed directly against the sheet's real header row.
+const SYSTEST_QC_COLS = {
+  timestamp: 0, sysNumber: 9, moduleList: 11, chargeRate: 17,
+  pcanHyg: 41, crownSwitch: 42, voltage: 75
+};
 
 // Same 7 stages/fileIds as the QC Tracker (Google Cloud OAuth version) — kept in sync manually.
 const STAGES = [
@@ -326,7 +351,10 @@ async function loadAllSheets() {
   setCacheUI('loading', 'Loading sheets...');
   document.getElementById('searchBtn').disabled = true;
 
-  const toLoad = [{ fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AH' }];
+  const toLoad = [
+    { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AH' },
+    { fileId: SYSTEST_QC.fileId, sheetName: SYSTEST_QC.sheetName, colRange: null }
+  ];
   if (dashboardMode === 'live') {
     for (const stage of STAGES) {
       toLoad.push({ fileId: stage.fileId, sheetName: stage.sheetName || 'Sheet1', colRange: stage.colRange || null });
@@ -670,11 +698,137 @@ function renderSyncedStages(summaryText, syncedAt) {
   syncNote.textContent = (overallMatch ? `Overall: ${overallMatch[1]} · ` : '') + (syncedAt ? `Last synced: ${syncedAt}` : 'Not yet synced');
 }
 
+// ─── CROSS-VERIFICATION: Framp spec vs. System Testing QC form ─────────────
+function parseModuleCount_(cellValue) {
+  if (!cellValue) return null;
+  const matches = String(cellValue).split('\n').map(l => l.trim()).filter(Boolean)
+    .filter(l => /^\d+\s*-\s*\d+/.test(l));
+  return matches.length || null;
+}
+
+function ccBadge(state, text) {
+  return `<span class="cc-badge ${state}">${text}</span>`;
+}
+
+function renderCrossCheck(target, registryRow) {
+  const panel = document.getElementById('crossCheckPanel');
+  panel.classList.add('show');
+
+  const key = SYSTEST_QC.fileId + '::' + SYSTEST_QC.sheetName;
+  const rows = sheetCache[key];
+  if (!rows || rows.length < 2) {
+    panel.innerHTML = `<div class="spec-empty">System Testing QC form not loaded — click "Load Sheets" above.</div>`;
+    return;
+  }
+  if (!registryRow) {
+    panel.innerHTML = `<div class="spec-empty">No Registry entry for this Serial — nothing to cross-check yet.</div>`;
+    return;
+  }
+
+  // Find every System Testing QC submission for this serial — there can be more than one (retests).
+  const c = SYSTEST_QC_COLS;
+  const matches = [];
+  for (let i = 1; i < rows.length; i++) {
+    const raw = rows[i][c.sysNumber];
+    if (raw === undefined || raw === null || String(raw).trim() === '') continue;
+    if (normalizeTarget(raw) !== target) continue;
+    matches.push(rows[i]);
+  }
+
+  if (matches.length === 0) {
+    panel.innerHTML = `<div class="spec-empty">No System Testing QC submission found yet for Serial ${target}.</div>`;
+    return;
+  }
+
+  // Use the most recent submission for the comparison; flag if multiple exist with different key values.
+  matches.sort((a, b) => new Date(b[c.timestamp]) - new Date(a[c.timestamp]));
+  const latest = matches[0];
+  let duplicateNote = '';
+  if (matches.length > 1) {
+    const chargeRates = new Set(matches.map(m => String(m[c.chargeRate] || '').trim()));
+    duplicateNote = `<div class="cc-note">⚠ ${matches.length} System Testing submissions found for this Serial (using the most recent, ${new Date(latest[c.timestamp]).toLocaleDateString()}).`
+      + (chargeRates.size > 1 ? ` Conflicting Charge Rate values across submissions: ${[...chargeRates].join(', ')} — worth checking if this was a legitimate retest.` : '') + `</div>`;
+  }
+
+  const get = (colName) => { const idx = REGISTRY_COLS.indexOf(colName); return registryRow[idx]; };
+
+  // --- Module Count ---
+  const frampModules = parseInt(get('Active Modules'), 10);
+  const qcModuleCount = parseModuleCount_(latest[c.moduleList]);
+  let moduleState = 'nodata', moduleQcText = '— no module list on file';
+  if (qcModuleCount !== null) {
+    moduleQcText = qcModuleCount + ' module(s) listed';
+    if (!isNaN(frampModules)) moduleState = qcModuleCount === frampModules ? 'match' : 'mismatch';
+  }
+
+  // --- Charge Rate ---
+  const frampCharge = parseFloat(get('Charge Rate (A)'));
+  const qcChargeRaw = latest[c.chargeRate];
+  const qcCharge = qcChargeRaw !== undefined && qcChargeRaw !== null && qcChargeRaw !== '' ? parseFloat(qcChargeRaw) : NaN;
+  let chargeState = 'nodata', chargeQcText = '— not recorded';
+  if (!isNaN(qcCharge)) {
+    chargeQcText = qcCharge + 'A';
+    if (!isNaN(frampCharge)) chargeState = qcCharge === frampCharge ? 'match' : 'mismatch';
+  }
+
+  // --- Voltage (only trust numeric 24/36/48/80 — older rows sometimes have stale "Yes" text here) ---
+  const actualV = get('Actual System Voltage'), packV = get('Pack Voltage');
+  const frampVoltage = actualV ? parseFloat(actualV) : (packV ? parseFloat(packV) : NaN);
+  const qcVoltRaw = latest[c.voltage];
+  const qcVoltNum = [24, 36, 48, 80].includes(Number(qcVoltRaw)) ? Number(qcVoltRaw) : NaN;
+  let voltState = 'nodata', voltQcText = '— not recorded';
+  if (!isNaN(qcVoltNum)) {
+    voltQcText = qcVoltNum + 'V';
+    if (!isNaN(frampVoltage)) {
+      // Framp's actual voltage can be e.g. 96V for a stringed 80V-bucket pack — compare against the Pack bucket in that case.
+      const packBucket = packV ? parseFloat(packV) : frampVoltage;
+      voltState = (qcVoltNum === frampVoltage || qcVoltNum === packBucket) ? 'match' : 'mismatch';
+    }
+  }
+
+  // --- HYG / Crown ---
+  const forkliftOem = (get('Forklift OEM') || '').toString().toLowerCase();
+  const forkliftCode = get('Forklift/Hyg-Crown Code');
+  const frampIsCrown = forkliftOem === 'crown';
+  const frampIsHyg = String(forkliftCode) === '1' && !frampIsCrown;
+  let frampHygCrownText = frampIsCrown ? 'Crown' : frampIsHyg ? 'HYG' : 'Neither';
+
+  const qcHygYes = String(latest[c.pcanHyg] || '').trim().toLowerCase() === 'yes';
+  const qcCrownFilled = latest[c.crownSwitch] !== undefined && latest[c.crownSwitch] !== null && String(latest[c.crownSwitch]).trim() !== '';
+  let qcHygCrownText = qcCrownFilled ? 'Crown' : qcHygYes ? 'HYG' : 'Neither';
+
+  const hygCrownState = frampHygCrownText === qcHygCrownText ? 'match' : 'mismatch';
+
+  const rowHtml = (label, frampVal, qcVal, state) => `
+    <div class="cc-row">
+      <div class="cc-label">${label}</div>
+      <div class="cc-val"><span class="cc-caption">Framp Spec</span>${frampVal}</div>
+      <div class="cc-val"><span class="cc-caption">System Testing QC</span>${qcVal}</div>
+      ${ccBadge(state, state === 'match' ? '✓ Match' : state === 'mismatch' ? '✗ Mismatch' : 'No data')}
+    </div>`;
+
+  panel.innerHTML = duplicateNote
+    + rowHtml('Module Count', isNaN(frampModules) ? '—' : frampModules, moduleQcText, moduleState)
+    + rowHtml('Charge Rate', isNaN(frampCharge) ? '—' : frampCharge + 'A', chargeQcText, chargeState)
+    + rowHtml('Voltage', isNaN(frampVoltage) ? '—' : frampVoltage + 'V', voltQcText, voltState)
+    + rowHtml('HYG / Crown', frampHygCrownText, qcHygCrownText, hygCrownState);
+}
+
 // Populates the shared spec+pipeline detail panel for a given serial — used by both
 // single-serial search and the month-search sidebar, so both modes render identically.
 async function populateDetail(serial) {
   const target = normalizeTarget(serial);
   renderSpec(target, serial);
+
+  const regKey = REGISTRY.fileId + '::' + REGISTRY.sheetName;
+  const regRows = sheetCache[regKey];
+  let registryRow = null;
+  if (regRows) {
+    for (let i = 1; i < regRows.length; i++) {
+      if (normalizeTarget(regRows[i][0] || '') === target) { registryRow = regRows[i]; break; }
+    }
+  }
+  renderCrossCheck(target, registryRow);
 
   if (dashboardMode === 'synced') {
     const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
