@@ -352,10 +352,10 @@ async function loadAllSheets() {
   document.getElementById('searchBtn').disabled = true;
 
   const toLoad = [
-    { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AH' },
-    { fileId: SYSTEST_QC.fileId, sheetName: SYSTEST_QC.sheetName, colRange: null }
+    { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AH' }
   ];
   if (dashboardMode === 'live') {
+    toLoad.push({ fileId: SYSTEST_QC.fileId, sheetName: SYSTEST_QC.sheetName, colRange: null });
     for (const stage of STAGES) {
       toLoad.push({ fileId: stage.fileId, sheetName: stage.sheetName || 'Sheet1', colRange: stage.colRange || null });
       if (stage.systestFileId) toLoad.push({ fileId: stage.systestFileId, sheetName: stage.systestSheetName || 'Sheet1', colRange: null });
@@ -710,18 +710,75 @@ function ccBadge(state, text) {
   return `<span class="cc-badge ${state}">${text}</span>`;
 }
 
+const CC_FIELD_LABELS = {
+  ModuleCount_ST: 'Module Count (System Testing)', ModuleCount_CU: 'Module Count (Closeup)',
+  ChargeRate: 'Charge Rate',
+  Voltage_ST: 'Voltage (System Testing)', Voltage_CU: 'Voltage (Closeup)',
+  HygCrown_ST: 'HYG / Crown (System Testing)', HygCrown_PS: 'HYG / Crown (Powershelf)',
+  UL: 'UL', Client: 'Client', Heater: 'Heater'
+};
+
+function renderCrossCheckSynced_(registryRow) {
+  const panel = document.getElementById('crossCheckPanel');
+  const statusIdx = REGISTRY_COLS.indexOf('Target Month') + 1; // AG
+  const syncedIdx = statusIdx + 1; // AH
+  const summary = registryRow[statusIdx] || '';
+  const syncedAt = registryRow[syncedIdx] || '';
+
+  const ccLine = summary.split('\n').find(l => l.startsWith('CrossCheck:'));
+  if (!ccLine) {
+    panel.innerHTML = `<div class="spec-empty">No Cross-Check data synced yet for this Serial. Run the QC Sync Apps Script, or switch to Live Check.</div>`;
+    return;
+  }
+  const m = ccLine.match(/^CrossCheck:\s*(PASS|FAIL|MISSING)\s*\((.*)\)$/);
+  if (!m || m[1] === 'MISSING') {
+    panel.innerHTML = `<div class="spec-empty">${m ? m[2] : 'No System Testing QC submission found for this Serial yet.'}</div>`;
+    return;
+  }
+
+  const tokens = m[2].split(';').map(t => t.trim()).filter(Boolean);
+  let html = '';
+  tokens.forEach(tok => {
+    if (tok.startsWith('[')) { html += `<div class="cc-note">⚠ ${tok.replace(/[\[\]]/g, '')}</div>`; return; }
+    const fm = tok.match(/^(\w+):(MATCH|MISMATCH)(?:\((.*)\))?$/);
+    if (!fm) return;
+    const label = CC_FIELD_LABELS[fm[1]] || fm[1];
+    const state = fm[2] === 'MATCH' ? 'match' : 'mismatch';
+    let frampVal = '—', qcVal = '—';
+    if (fm[3]) {
+      const parts = fm[3].split(',');
+      const fp = parts.find(p => p.startsWith('Framp=')); const qp = parts.find(p => p.startsWith('QC='));
+      if (fp) frampVal = fp.replace('Framp=', '');
+      if (qp) qcVal = qp.replace('QC=', '');
+    } else if (state === 'match') {
+      frampVal = qcVal = '✓ consistent';
+    }
+    html += `<div class="cc-row">
+      <div class="cc-label">${label}</div>
+      <div class="cc-val"><span class="cc-caption">Framp Spec</span>${frampVal}</div>
+      <div class="cc-val"><span class="cc-caption">System Testing QC</span>${qcVal}</div>
+      ${ccBadge(state, state === 'match' ? '✓ Match' : '✗ Mismatch')}
+    </div>`;
+  });
+  html += `<div class="cc-note" style="color:var(--text-faint);">Synced ${syncedAt ? new Date(syncedAt).toLocaleString() : 'time unknown'}. Switch to Live Check for real-time verification.</div>`;
+  panel.innerHTML = html;
+}
+
 function renderCrossCheck(target, registryRow) {
   const panel = document.getElementById('crossCheckPanel');
   panel.classList.add('show');
+
+  if (!registryRow) {
+    panel.innerHTML = `<div class="spec-empty">No Registry entry for this Serial — nothing to cross-check yet.</div>`;
+    return;
+  }
+
+  if (dashboardMode === 'synced') { renderCrossCheckSynced_(registryRow); return; }
 
   const key = SYSTEST_QC.fileId + '::' + SYSTEST_QC.sheetName;
   const rows = sheetCache[key];
   if (!rows || rows.length < 2) {
     panel.innerHTML = `<div class="spec-empty">System Testing QC form not loaded — click "Load Sheets" above.</div>`;
-    return;
-  }
-  if (!registryRow) {
-    panel.innerHTML = `<div class="spec-empty">No Registry entry for this Serial — nothing to cross-check yet.</div>`;
     return;
   }
 
