@@ -851,7 +851,8 @@ function renderCrossCheck(target, registryRow) {
   let frampHygCrownText = frampIsCrown ? 'Crown' : frampIsHyg ? 'HYG' : 'Neither';
 
   const qcHygYes = String(latest[c.pcanHyg] || '').trim().toLowerCase() === 'yes';
-  const qcCrownFilled = latest[c.crownSwitch] !== undefined && latest[c.crownSwitch] !== null && String(latest[c.crownSwitch]).trim() !== '';
+  const qcCrownVal = String(latest[c.crownSwitch] || '').trim();
+  const qcCrownFilled = qcCrownVal !== '' && !/^n\s*\/?\s*a$/i.test(qcCrownVal); // "N/A"/"NA"/"n/a" means NOT Crown, not "is Crown"
   let qcHygCrownText = qcCrownFilled ? 'Crown' : qcHygYes ? 'HYG' : 'Neither';
 
   const hygCrownState = frampHygCrownText === qcHygCrownText ? 'match' : 'mismatch';
