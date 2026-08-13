@@ -248,12 +248,12 @@ const REGISTRY_COLS = [
 // Module Count, Charge Rate, HYG/Crown, and Voltage against what Framp generated.
 const SYSTEST_QC = {
   fileId: '1bEEB1iY6DkPuk4N_UzEWSoamF8BRSYzuN12w_rKsmlM',
-  sheetName: 'Form Responses 1' // corrected - was pointing at a different/incomplete tab before
+  sheetName: 'Form Responses 5' // relinked tab - column positions shifted, see SYSTEST_QC_COLS below
 };
-// 0-indexed column positions, confirmed directly against the sheet's real header row.
+// 0-indexed column positions, confirmed directly against the sheet's real header row (post-relink).
 const SYSTEST_QC_COLS = {
-  timestamp: 0, sysNumber: 9, moduleList: 11, chargeRate: 17,
-  pcanHyg: 41, crownSwitch: 42, voltage: 75
+  timestamp: 0, sysNumber: 16, clientMainFolder: 17, voltage: 22, chargeRate: 25,
+  moduleList: 38, hygEnabled: 56, crownSwitch: 57
 };
 
 // Same 7 stages/fileIds as the QC Tracker (Google Cloud OAuth version) — kept in sync manually.
@@ -715,7 +715,7 @@ const CC_FIELD_LABELS = {
   ChargeRate: 'Charge Rate',
   Voltage_ST: 'Voltage (System Testing)', Voltage_CU: 'Voltage (Closeup)',
   HygCrown_ST: 'HYG / Crown (System Testing)', HygCrown_PS: 'HYG / Crown (Powershelf)',
-  UL: 'UL', Client: 'Client', Heater: 'Heater'
+  UL: 'UL', Client_ST: 'Client (System Testing)', Client_CU: 'Client (Closeup)', Heater: 'Heater'
 };
 
 function renderCrossCheckSynced_(registryRow) {
@@ -850,7 +850,7 @@ function renderCrossCheck(target, registryRow) {
   const frampIsHyg = String(forkliftCode) === '1' && !frampIsCrown;
   let frampHygCrownText = frampIsCrown ? 'Crown' : frampIsHyg ? 'HYG' : 'Neither';
 
-  const qcHygYes = String(latest[c.pcanHyg] || '').trim().toLowerCase() === 'yes';
+  const qcHygYes = String(latest[c.hygEnabled] || '').trim().toLowerCase() === 'yes';
   const qcCrownVal = String(latest[c.crownSwitch] || '').trim();
   const qcCrownFilled = qcCrownVal !== '' && !/^n\s*\/?\s*a$/i.test(qcCrownVal); // "N/A"/"NA"/"n/a" means NOT Crown, not "is Crown"
   let qcHygCrownText = qcCrownFilled ? 'Crown' : qcHygYes ? 'HYG' : 'Neither';
