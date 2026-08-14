@@ -174,10 +174,16 @@
     </div>
   </div>
 
-  <div class="view-toggle">
-    <button class="view-btn active" id="btnBySerial" onclick="switchSearchMode('serial')">⊙ By Serial</button>
-    <button class="view-btn" id="btnByMonth" onclick="switchSearchMode('month')">⊞ By Monthly Target</button>
+  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+    <div class="view-toggle" style="margin:0;">
+      <button class="view-btn active" id="btnBySerial" onclick="switchSearchMode('serial')">⊙ By Serial</button>
+      <button class="view-btn" id="btnByMonth" onclick="switchSearchMode('month')">⊞ By Monthly Target</button>
+      <button class="view-btn" id="btnByShipping" onclick="switchSearchMode('shipping')">🚚 Shipping Confirmed</button>
+    </div>
+    <button class="refresh-btn" onclick="toggleCcLegend()">ⓘ What's checked in Cross-Verification?</button>
   </div>
+
+  <div id="ccLegendPanel" class="spec-panel" style="display:none; margin-bottom:20px;"></div>
 
   <div class="search-console" id="serialSearchPanel">
     <input type="text" id="serialInput" placeholder="Enter Serial / System Number e.g. 13554" autocomplete="off">
@@ -199,6 +205,16 @@
     </div>
   </div>
 
+  <div id="shippingResultsWrap" style="display:none;">
+    <div class="section-title">Confirmed for shipping <span class="badge" id="shippingResultCount"></span></div>
+    <div class="month-workspace">
+      <div class="month-sidebar" id="shippingSidebar"></div>
+      <div class="month-detail" id="shippingDetail">
+        <div class="empty-state" id="shippingDetailEmpty" style="padding:40px 20px;">Select a Serial from the list on the left to see its spec and QC pipeline.</div>
+      </div>
+    </div>
+  </div>
+
   <div class="empty-state" id="emptyState">Sign in and load sheets, then enter a Serial to see everything on file for that unit.</div>
 
   <div id="resultsAnchor"></div>
@@ -216,9 +232,12 @@
       <div class="stages" id="stages"></div>
     </div>
     <div class="results" id="results"></div>
+
+    <div class="section-title">Shipping <span class="badge">manual confirmation, this dashboard only</span></div>
+    <div class="spec-panel" id="shipPanel"></div>
   </div>
 
-  <footer>Master Battery Dashboard · Stromcore · reads Master Registry + all 7 QC Tracker stage sheets, zero write access</footer>
+  <footer>Master Battery Dashboard · Stromcore · reads Master Registry + all 7 QC Tracker stage sheets, writes only the Shipping Confirmed flag</footer>
 </div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -226,7 +245,7 @@
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 // Same OAuth Client ID as the QC Tracker so sign-in behaves identically across both pages.
 const CLIENT_ID = '1848041462-n1kcsireto5o27u8cptuee6riofm44o3.apps.googleusercontent.com';
-const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly';
+const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly';
 const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 // Master Battery Registry — new sheet, one row per Serial, spec/order fields.
@@ -243,6 +262,11 @@ const REGISTRY_COLS = [
   'Telemetry Type','Screen','Discharge Jumpers','Charge Jumpers','Packaging','Flags/Warnings at Creation',
   'Target Month'
 ];
+// 0-indexed positions of the columns past REGISTRY_COLS - AG=32 (QC Pipeline Status, synced summary),
+// AH=33 (QC Last Synced), AI=34 (Shipping Confirmed, Yes/No - user-set from this dashboard).
+const REG_STATUS_COL = REGISTRY_COLS.indexOf('Target Month') + 1; // 32 = AG
+const REG_SYNCED_COL = REG_STATUS_COL + 1; // 33 = AH
+const REG_SHIP_COL = REG_STATUS_COL + 2; // 34 = AI
 
 // Real System Testing QC form (full responses, not the trimmed lookup sheet) — used to cross-verify
 // Module Count, Charge Rate, HYG/Crown, and Voltage against what Framp generated.
@@ -352,7 +376,7 @@ async function loadAllSheets() {
   document.getElementById('searchBtn').disabled = true;
 
   const toLoad = [
-    { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AH' }
+    { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AI' }
   ];
   if (dashboardMode === 'live') {
     toLoad.push({ fileId: SYSTEST_QC.fileId, sheetName: SYSTEST_QC.sheetName, colRange: null });
@@ -739,28 +763,33 @@ function renderCrossCheckSynced_(registryRow) {
 
   const tokens = m[2].split(';').map(t => t.trim()).filter(Boolean);
   let html = '';
+  let matchCount = 0, mismatchCount = 0;
+  let dupeNoteHtml = '';
   tokens.forEach(tok => {
-    if (tok.startsWith('[')) { html += `<div class="cc-note">⚠ ${tok.replace(/[\[\]]/g, '')}</div>`; return; }
+    if (tok.startsWith('[')) { dupeNoteHtml += `<div class="cc-note">⚠ ${tok.replace(/[\[\]]/g, '')}</div>`; return; }
     const fm = tok.match(/^(\w+):(MATCH|MISMATCH)(?:\((.*)\))?$/);
     if (!fm) return;
+    if (fm[2] === 'MATCH') { matchCount++; return; } // only surface problems - matches are counted but not shown
+    mismatchCount++;
     const label = CC_FIELD_LABELS[fm[1]] || fm[1];
-    const state = fm[2] === 'MATCH' ? 'match' : 'mismatch';
     let frampVal = '—', qcVal = '—';
     if (fm[3]) {
       const parts = fm[3].split(',');
       const fp = parts.find(p => p.startsWith('Framp=')); const qp = parts.find(p => p.startsWith('QC='));
       if (fp) frampVal = fp.replace('Framp=', '');
       if (qp) qcVal = qp.replace('QC=', '');
-    } else if (state === 'match') {
-      frampVal = qcVal = '✓ consistent';
     }
     html += `<div class="cc-row">
       <div class="cc-label">${label}</div>
       <div class="cc-val"><span class="cc-caption">Framp Spec</span>${frampVal}</div>
       <div class="cc-val"><span class="cc-caption">System Testing QC</span>${qcVal}</div>
-      ${ccBadge(state, state === 'match' ? '✓ Match' : '✗ Mismatch')}
+      ${ccBadge('mismatch', '✗ Mismatch')}
     </div>`;
   });
+  html = dupeNoteHtml + html;
+  if (mismatchCount === 0) {
+    html = dupeNoteHtml + `<div class="spec-empty" style="color:var(--success);">✓ All ${matchCount} checks passed — no mismatches found.</div>` + html;
+  }
   html += `<div class="cc-note" style="color:var(--text-faint);">Synced ${syncedAt ? new Date(syncedAt).toLocaleString() : 'time unknown'}. Switch to Live Check for real-time verification.</div>`;
   panel.innerHTML = html;
 }
@@ -875,6 +904,88 @@ function renderCrossCheck(target, registryRow) {
 
 // Populates the shared spec+pipeline detail panel for a given serial — used by both
 // single-serial search and the month-search sidebar, so both modes render identically.
+function colLetter(idx0){
+  let n = idx0 + 1, s = '';
+  while (n > 0){ const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+
+// Static reference of every field currently compared, independent of any specific Serial.
+function toggleCcLegend(){
+  const panel = document.getElementById('ccLegendPanel');
+  const isOpen = panel.style.display === 'block';
+  if (isOpen) { panel.style.display = 'none'; return; }
+  const rowsHtml = Object.entries(CC_FIELD_LABELS).map(([key, label]) => `
+    <div class="cc-row" style="grid-template-columns: 1fr 2fr;">
+      <div class="cc-label">${key}</div>
+      <div class="cc-val">${label}</div>
+    </div>`).join('');
+  panel.innerHTML = `
+    <div class="spec-header"><div class="name">Cross-Verification — current checks</div></div>
+    <div class="hint" style="color:var(--text-dim); font-size:12.5px; margin:0 0 12px;">
+      Every field currently compared between Framp's spec and the real QC forms. Per-unit results only show mismatches — this is a static list of what's checked, not tied to any Serial.
+    </div>
+    ${rowsHtml}`;
+  panel.style.display = 'block';
+}
+
+// ─── SHIPPING CONFIRMATION (writes REG_SHIP_COL / column AI) ───────────────
+function renderShipPanel(target, registryRow){
+  const panel = document.getElementById('shipPanel');
+  if (!registryRow){ panel.innerHTML = `<div class="spec-empty">No Registry entry for this Serial.</div>`; return; }
+  const confirmed = String(registryRow[REG_SHIP_COL] || '').trim().toLowerCase() === 'yes';
+  panel.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-faint); margin-bottom:4px;">Status</div>
+        <div style="font-size:15px; font-weight:600; color:${confirmed ? 'var(--success)' : 'var(--text-dim)'};">${confirmed ? '✓ Confirmed for shipping' : 'Not yet confirmed'}</div>
+      </div>
+      <button class="refresh-btn" id="shipToggleBtn" onclick="toggleShipConfirm('${target}')" style="${confirmed ? 'border-color:var(--danger); color:var(--danger);' : 'border-color:var(--amber); color:var(--amber);'}">
+        ${confirmed ? 'Unmark' : 'Confirm for Shipping'}
+      </button>
+    </div>`;
+}
+
+async function toggleShipConfirm(target){
+  if (!accessToken) return;
+  const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
+  const rows = sheetCache[key];
+  if (!rows) return;
+  let rowIdx = -1;
+  for (let i = 1; i < rows.length; i++){ if (normalizeTarget(rows[i][0] || '') === target){ rowIdx = i; break; } }
+  if (rowIdx === -1) return;
+
+  const currentlyYes = String(rows[rowIdx][REG_SHIP_COL] || '').trim().toLowerCase() === 'yes';
+  const newVal = currentlyYes ? 'No' : 'Yes';
+
+  if (newVal === 'Yes'){
+    const summary = rows[rowIdx][REG_STATUS_COL] || '';
+    const hasIssues = /:\s*FAIL\b/.test(summary) || /:\s*MISSING\b/.test(summary);
+    if (hasIssues){
+      const proceed = confirm('This unit still has open QC issues (a failed/missing stage or a Cross-Verification mismatch). Confirm shipping anyway?');
+      if (!proceed) return;
+    }
+  }
+
+  const btn = document.getElementById('shipToggleBtn');
+  if (btn){ btn.textContent = 'Saving...'; btn.disabled = true; }
+  try{
+    const colL = colLetter(REG_SHIP_COL);
+    const range = encodeURIComponent(`${REGISTRY.sheetName}!${colL}${rowIdx + 1}`);
+    const resp = await fetch(`${SHEETS_API}/${REGISTRY.fileId}/values/${range}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[newVal]] })
+    });
+    if (!resp.ok){ const err = await resp.text(); throw new Error(`${resp.status}: ${err.slice(0,150)}`); }
+    rows[rowIdx][REG_SHIP_COL] = newVal;
+    renderShipPanel(target, rows[rowIdx]);
+  } catch(e){
+    alert('Failed to update shipping status: ' + e.message);
+    renderShipPanel(target, rows[rowIdx]);
+  }
+}
+
 async function populateDetail(serial) {
   const target = normalizeTarget(serial);
   renderSpec(target, serial);
@@ -888,6 +999,7 @@ async function populateDetail(serial) {
     }
   }
   renderCrossCheck(target, registryRow);
+  renderShipPanel(target, registryRow);
 
   if (dashboardMode === 'synced') {
     const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
@@ -940,21 +1052,25 @@ document.getElementById('monthInput').addEventListener('keydown', e => { if (e.k
 function switchSearchMode(mode) {
   document.getElementById('btnBySerial').classList.toggle('active', mode === 'serial');
   document.getElementById('btnByMonth').classList.toggle('active', mode === 'month');
+  document.getElementById('btnByShipping').classList.toggle('active', mode === 'shipping');
   document.getElementById('serialSearchPanel').style.display = mode === 'serial' ? 'flex' : 'none';
   document.getElementById('monthSearchPanel').style.display = mode === 'month' ? 'flex' : 'none';
   document.getElementById('monthResultsWrap').style.display = 'none';
+  document.getElementById('shippingResultsWrap').style.display = 'none';
 
-  // Restore resultsWrap to its normal spot when leaving month mode, so serial-mode search works normally.
+  // Restore resultsWrap to its normal spot when leaving month/shipping mode, so serial-mode search works normally.
   if (mode === 'serial') {
     const anchor = document.getElementById('resultsAnchor');
     anchor.insertAdjacentElement('afterend', document.getElementById('resultsWrap'));
   }
   document.getElementById('resultsWrap').style.display = 'none';
 
-  document.getElementById('emptyState').style.display = 'block';
+  document.getElementById('emptyState').style.display = mode === 'shipping' ? 'none' : 'block';
   document.getElementById('emptyState').textContent = mode === 'serial'
     ? 'Sign in and load sheets, then enter a Serial to see everything on file for that unit.'
-    : 'Sign in and load sheets, then pick a month to see every unit targeted for it.';
+    : mode === 'month' ? 'Sign in and load sheets, then pick a month to see every unit targeted for it.' : '';
+
+  if (mode === 'shipping') runShippingList();
 }
 
 // Same formatting as the Monthly Target tool's monthLabel(), so values match exactly (e.g. "August 2026").
@@ -1034,7 +1150,65 @@ async function selectMonthSerial(idx) {
   await populateDetail(serial);
 }
 
+let shippingMatches = []; // current Shipping-Confirmed=Yes rows, so sidebar clicks don't need to re-search
 
+function runShippingList() {
+  if (!cacheLoadedAt) { setCacheUI('error', 'Please load sheets first.'); document.getElementById('emptyState').style.display = 'block'; document.getElementById('emptyState').textContent = 'Sign in and load sheets first.'; return; }
+
+  const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
+  const rows = sheetCache[key];
+
+  document.getElementById('shippingResultsWrap').style.display = 'block';
+
+  const matches = [];
+  if (rows && rows.length > 1) {
+    for (let i = 1; i < rows.length; i++) {
+      const val = (rows[i][REG_SHIP_COL] || '').toString().trim().toLowerCase();
+      if (val === 'yes') matches.push(rows[i]);
+    }
+  }
+  shippingMatches = matches;
+
+  document.getElementById('shippingResultCount').textContent = `${matches.length} unit(s)`;
+  const sidebar = document.getElementById('shippingSidebar');
+
+  const resultsEl = document.getElementById('resultsWrap');
+  resultsEl.style.display = 'none';
+  document.getElementById('shippingDetailEmpty').style.display = 'block';
+
+  if (matches.length === 0) {
+    sidebar.innerHTML = `<div class="month-empty">No units confirmed for shipping yet.<br>Use the "Confirm for Shipping" button on a unit's detail page to add it here.</div>`;
+    return;
+  }
+
+  const get = (row, colName) => { const idx = REGISTRY_COLS.indexOf(colName); return row[idx] || ''; };
+  sidebar.innerHTML = matches.map((row, i) => {
+    const serial = get(row, 'Serial');
+    const client = get(row, 'Client');
+    return `<button class="month-sidebar-item" id="ssi-${i}" onclick="selectShippingSerial(${i})">
+      <div class="msi-serial">${serial}</div>
+      <div class="msi-client">${client || '—'}</div>
+    </button>`;
+  }).join('');
+}
+
+async function selectShippingSerial(idx) {
+  const row = shippingMatches[idx];
+  if (!row) return;
+  const serial = row[REGISTRY_COLS.indexOf('Serial')];
+
+  document.querySelectorAll('#shippingSidebar .month-sidebar-item').forEach(el => el.classList.remove('active'));
+  const btn = document.getElementById('ssi-' + idx);
+  if (btn) btn.classList.add('active');
+
+  const detail = document.getElementById('shippingDetail');
+  const resultsEl = document.getElementById('resultsWrap');
+  document.getElementById('shippingDetailEmpty').style.display = 'none';
+  detail.appendChild(resultsEl);
+  resultsEl.style.display = 'block';
+
+  await populateDetail(serial);
+}
 </script>
 </body>
 </html>
