@@ -932,6 +932,7 @@ function toggleCcLegend(){
 // ─── SHIPPING CONFIRMATION (writes REG_SHIP_COL / column AI) ───────────────
 function renderShipPanel(target, registryRow){
   const panel = document.getElementById('shipPanel');
+  panel.classList.add('show');
   if (!registryRow){ panel.innerHTML = `<div class="spec-empty">No Registry entry for this Serial.</div>`; return; }
   const confirmed = String(registryRow[REG_SHIP_COL] || '').trim().toLowerCase() === 'yes';
   panel.innerHTML = `
