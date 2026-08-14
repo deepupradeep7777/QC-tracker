@@ -138,10 +138,69 @@
   .month-sidebar-item:last-child { border-bottom: none; }
   .month-sidebar-item:hover { background: var(--panel-raised); }
   .month-sidebar-item.active { background: rgba(242,169,0,.12); border-left: 3px solid var(--amber); padding-left: 11px; }
-  .month-sidebar-item .msi-serial { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 13.5px; }
+  .month-sidebar-item .msi-serial { font-family: 'JetBrains Mono', monospace; font-weight: 600; font-size: 13.5px; display:flex; align-items:center; gap:7px; }
   .month-sidebar-item .msi-client { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
-  .month-detail { flex: 1; min-width: 0; }
+  .msi-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--grey); }
+  .msi-status-dot.green { background: var(--success); box-shadow: 0 0 5px var(--success); }
+  .msi-status-dot.red { background: var(--danger); box-shadow: 0 0 5px var(--danger); }
+  .msi-status-dot.amber { background: var(--amber); box-shadow: 0 0 5px var(--amber); }
   @media (max-width: 720px) { .month-workspace { flex-direction: column; } .month-sidebar { flex: 0 0 auto; max-height: 240px; width: 100%; } }
+
+  /* ── Detail view top-level tabs: Pipeline+Spec  vs  Cross-Verification + System Testing ── */
+  .detail-tabs { display: flex; gap: 8px; margin-bottom: 22px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .detail-tab-btn { padding: 11px 20px; border-radius: 8px 8px 0 0; border: 1px solid var(--border-strong); border-bottom: none; background: var(--panel); color: var(--text-dim); font-family: 'Inter', sans-serif; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: all 0.2s; position: relative; top: 1px; }
+  .detail-tab-btn.active { background: var(--panel-raised); color: var(--amber); border-color: var(--border-strong); }
+  .detail-tab-btn:hover:not(.active) { color: var(--text); }
+  .detail-panel { display: none; }
+  .detail-panel.show { display: block; }
+
+  /* ── System Testing Influx QC panel ── */
+  .upload-box { border: 2px dashed var(--border-strong); border-radius: 10px; padding: 26px 20px; text-align: center; color: var(--text-dim); font-size: 13.5px; cursor: pointer; margin-bottom: 18px; transition: border-color .2s, color .2s; }
+  .upload-box:hover, .upload-box.dragover { border-color: var(--amber); color: var(--amber); }
+  .upload-box .ub-icon { font-size: 22px; margin-bottom: 6px; }
+  .upload-box .ub-filename { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--success); margin-top: 6px; }
+
+  .iq-threshold-row { display: flex; gap: 18px; margin-bottom: 18px; flex-wrap: wrap; align-items: flex-end; }
+  .iq-threshold-field { display: flex; flex-direction: column; gap: 5px; }
+  .iq-threshold-field label { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-faint); }
+  .iq-threshold-field input { background: var(--panel-raised); border: 1px solid var(--border-strong); border-radius: 6px; padding: 9px 11px; color: var(--text); width: 110px; font-family: 'JetBrains Mono', monospace; font-size: 13.5px; }
+  .iq-threshold-field input:focus { border-color: var(--blue); outline: none; }
+  .iq-threshold-hint { font-size: 11px; color: var(--text-faint); }
+  .iq-run-btn { background: var(--amber); color: #1a1400; border: none; border-radius: 6px; padding: 10px 20px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13.5px; cursor: pointer; height: 40px; }
+  .iq-run-btn:disabled { opacity: .45; cursor: default; }
+  .iq-run-btn:hover:not(:disabled) { background: #ffbb1a; }
+
+  .iq-summary { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .iq-summary-chip { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; padding: 6px 12px; border-radius: 20px; border: 1px solid var(--border-strong); }
+  .iq-summary-chip.pass { color: var(--success); border-color: var(--success-dim); background: var(--success-dim); }
+  .iq-summary-chip.fail { color: var(--danger); border-color: var(--danger-dim); background: var(--danger-dim); }
+  .iq-summary-chip.info { color: var(--text-dim); }
+
+  .iq-block-title { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-faint); margin: 18px 0 8px; }
+  .iq-check { display: flex; align-items: center; justify-content: space-between; gap: 14px; background: var(--panel-raised); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; flex-wrap: wrap; }
+  .iq-check-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .iq-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .iq-dot.pass { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .iq-dot.fail { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+  .iq-text { min-width: 0; }
+  .iq-label { font-size: 13.5px; font-weight: 600; }
+  .iq-detail { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: var(--text-dim); margin-top: 2px; }
+  .iq-override-tag { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; color: var(--amber); text-transform: uppercase; margin-left: 8px; background: var(--amber-dim); padding: 2px 7px; border-radius: 10px; }
+  .iq-switch { position: relative; width: 42px; height: 23px; flex-shrink: 0; }
+  .iq-switch input { opacity: 0; width: 0; height: 0; }
+  .iq-slider { position: absolute; cursor: pointer; inset: 0; background: var(--grey); border-radius: 22px; transition: .2s; }
+  .iq-slider:before { content: ""; position: absolute; width: 17px; height: 17px; left: 3px; bottom: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+  .iq-switch input:checked + .iq-slider { background: var(--success); }
+  .iq-switch input:checked + .iq-slider:before { transform: translateX(19px); }
+  .iq-switch input:disabled + .iq-slider { opacity: .35; cursor: default; }
+  .iq-switch-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
+  .iq-switch-label { font-family: 'JetBrains Mono', monospace; font-size: 8.5px; text-transform: uppercase; color: var(--text-faint); }
+
+  .iq-save-btn { background: transparent; border: 1px solid var(--success); color: var(--success); border-radius: 6px; padding: 11px 22px; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13.5px; cursor: pointer; margin-top: 16px; }
+  .iq-save-btn:hover:not(:disabled) { background: var(--success-dim); }
+  .iq-save-btn:disabled { opacity: .4; cursor: default; }
+  .iq-save-status { font-size: 12px; color: var(--text-dim); margin-top: 8px; font-family: 'JetBrains Mono', monospace; }
+  .iq-history-note { font-size: 11.5px; color: var(--text-faint); margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -220,24 +279,37 @@
   <div id="resultsAnchor"></div>
   <div id="resultsWrap" style="display:none;">
 
-    <div class="section-title">Spec &amp; Order Details <span class="badge">Master Battery Registry</span></div>
-    <div class="spec-panel" id="specPanel"></div>
-
-    <div class="section-title">Cross-Verification <span class="badge">Framp spec vs. System Testing QC</span></div>
-    <div class="spec-panel" id="crossCheckPanel"></div>
-
-    <div class="section-title">QC Pipeline <span class="badge">7 stages · live from production sheets</span></div>
-    <div class="line-wrap">
-      <div class="line-track"></div>
-      <div class="stages" id="stages"></div>
+    <!-- Top-level toggle: Pipeline+Spec  vs  Cross-Verification + System Testing Influx -->
+    <div class="detail-tabs">
+      <button class="detail-tab-btn active" id="detailTabBtnPipeline" onclick="switchDetailTab('pipeline')">📋 Pipeline &amp; Spec</button>
+      <button class="detail-tab-btn" id="detailTabBtnCross" onclick="switchDetailTab('cross')">🔬 Cross-Verification &amp; System Testing</button>
     </div>
-    <div class="results" id="results"></div>
 
-    <div class="section-title">Shipping <span class="badge">manual confirmation, this dashboard only</span></div>
-    <div class="spec-panel" id="shipPanel"></div>
+    <div class="detail-panel show" id="detailPanelPipeline">
+      <div class="section-title">Spec &amp; Order Details <span class="badge">Master Battery Registry</span></div>
+      <div class="spec-panel" id="specPanel"></div>
+
+      <div class="section-title">QC Pipeline <span class="badge">7 stages · live from production sheets</span></div>
+      <div class="line-wrap">
+        <div class="line-track"></div>
+        <div class="stages" id="stages"></div>
+      </div>
+      <div class="results" id="results"></div>
+
+      <div class="section-title">Shipping <span class="badge">manual confirmation, this dashboard only</span></div>
+      <div class="spec-panel" id="shipPanel"></div>
+    </div>
+
+    <div class="detail-panel" id="detailPanelCross">
+      <div class="section-title">Cross-Verification <span class="badge">Framp spec vs. System Testing QC</span></div>
+      <div class="spec-panel" id="crossCheckPanel"></div>
+
+      <div class="section-title">System Testing — Influx QC <span class="badge">upload CSV · threshold checks</span></div>
+      <div class="spec-panel show" id="influxQcPanel"></div>
+    </div>
   </div>
 
-  <footer>Master Battery Dashboard · Stromcore · reads Master Registry + all 7 QC Tracker stage sheets, writes only the Shipping Confirmed flag</footer>
+  <footer>Master Battery Dashboard · Stromcore · reads Master Registry + all 7 QC Tracker stage sheets, writes Shipping Confirmed flag + System Testing Influx QC results</footer>
 </div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -280,6 +352,27 @@ const SYSTEST_QC_COLS = {
   moduleList: 38, hygEnabled: 56, crownSwitch: 57
 };
 
+// ── System Testing Influx QC — new tab in the same Registry spreadsheet ─────
+// Row 1-3 = editable global default thresholds (sheet-only edit, never written by this dashboard).
+// Row 5 = headers, row 6+ = one row per QC run (appended).
+const INFLUX_QC_SHEET = { fileId: REGISTRY.fileId, sheetName: 'SysTest Influx QC' };
+const INFLUX_QC_DEFAULTS_RANGE = 'A1:B3';
+const INFLUX_QC_DATA_RANGE = 'A5:AL'; // header row + all data, used for append anchor
+const INFLUX_QC_COLS = [
+  'Serial','Run Timestamp','Data Start (from CSV)','Data End (from CSV)',
+  'Any_Fault Value','Any_Fault Result','Any_Fault Override',
+  'Any_Warning Value','Any_Warning Result','Any_Warning Override',
+  'BMS_Error_Code_1 Value','BMS_Error_Code_1 Result','BMS_Error_Code_1 Override',
+  'BMS_Error_Code_2 Value','BMS_Error_Code_2 Result','BMS_Error_Code_2 Override',
+  'Cell_Delta Value','Cell_Delta Threshold Used','Cell_Delta Result','Cell_Delta Override',
+  'Mod_Delta Value','Mod_Delta Threshold Used','Mod_Delta Result','Mod_Delta Override',
+  'Charge Rate Expected','Main Current Actual','Charge Rate Result','Charge Rate Override',
+  'Voltage Expected (nominal pack)','Voltage Level Actual','Voltage Result','Voltage Override',
+  'Baud Expected (Framp)','Baud Actual (Influx)','Baud Result','Baud Override',
+  'Overall Result','Reviewed By'
+]; // 38 cols, A..AL — matches the header row already created in the sheet
+const IQ_STANDARD_BAUD = 250; // your CAN1_Baud standard — Registry doesn't carry a baud column, so this is the fixed expectation
+
 // Same 7 stages/fileIds as the QC Tracker (Google Cloud OAuth version) — kept in sync manually.
 const STAGES = [
   { id: 'module', label: 'Module QC', tag: 'PWI0005/6/7', fileId: '1qii-StLhMPAmXcaD0bjKjPAJYNBVxxmubMDoUww-eW0', sheetName: 'QC Passed', colRange: 'A1:B', mode: 'module', systestFileId: '1NGIsb9SbsgE7JlyZjvpa8iS9z20H1Wy4s7CgMvH1CtE', systestSheetName: 'Sheet1' },
@@ -295,6 +388,7 @@ let accessToken = null;
 let tokenClient = null;
 let cacheLoadedAt = null;
 const sheetCache = {};
+let currentSerial = null; // tracks whatever serial is currently shown in the detail panel, for the Influx QC save step
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 function setAuthUI(state, text, btnText, btnClass) {
@@ -376,7 +470,8 @@ async function loadAllSheets() {
   document.getElementById('searchBtn').disabled = true;
 
   const toLoad = [
-    { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AI' }
+    { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AI' },
+    { fileId: INFLUX_QC_SHEET.fileId, sheetName: INFLUX_QC_SHEET.sheetName, colRange: INFLUX_QC_DEFAULTS_RANGE }
   ];
   if (dashboardMode === 'live') {
     toLoad.push({ fileId: SYSTEST_QC.fileId, sheetName: SYSTEST_QC.sheetName, colRange: null });
@@ -531,6 +626,15 @@ function setStageUI(id, state, statusText, note, rowText) {
   else rowEl.classList.remove('show');
 }
 
+// ─── DETAIL TABS (Pipeline+Spec  vs  Cross-Verification + System Testing) ──
+function switchDetailTab(tab) {
+  document.getElementById('detailTabBtnPipeline').classList.toggle('active', tab === 'pipeline');
+  document.getElementById('detailTabBtnCross').classList.toggle('active', tab === 'cross');
+  document.getElementById('detailPanelPipeline').classList.toggle('show', tab === 'pipeline');
+  document.getElementById('detailPanelCross').classList.toggle('show', tab === 'cross');
+  if (tab === 'cross' && currentSerial) ensureInfluxQcPanelInit();
+}
+
 // ─── SPEC PANEL (Master Registry lookup) ────────────────────────────────────
 function renderSpec(target, serial) {
   const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
@@ -588,6 +692,21 @@ function renderSpec(target, serial) {
     <div class="spec-grid">${fieldsHtml}</div>
     ${flags ? `<div class="spec-flags">⚠ Flagged at creation: ${flags}</div>` : ''}
   `;
+}
+
+function getRegistryRow(target) {
+  const regKey = REGISTRY.fileId + '::' + REGISTRY.sheetName;
+  const regRows = sheetCache[regKey];
+  if (!regRows) return null;
+  for (let i = 1; i < regRows.length; i++) {
+    if (normalizeTarget(regRows[i][0] || '') === target) return regRows[i];
+  }
+  return null;
+}
+function regField(registryRow, colName) {
+  if (!registryRow) return null;
+  const idx = REGISTRY_COLS.indexOf(colName);
+  return idx >= 0 && registryRow[idx] !== undefined && registryRow[idx] !== '' ? registryRow[idx] : null;
 }
 
 // ─── CHECK STAGE (same logic as QC Tracker) ─────────────────────────────────
@@ -837,7 +956,7 @@ function renderCrossCheck(target, registryRow) {
       + (chargeRates.size > 1 ? ` Conflicting Charge Rate values across submissions: ${[...chargeRates].join(', ')} — worth checking if this was a legitimate retest.` : '') + `</div>`;
   }
 
-  const get = (colName) => { const idx = REGISTRY_COLS.indexOf(colName); return registryRow[idx]; };
+  const get = (colName) => regField(registryRow, colName);
 
   // --- Module Count ---
   const frampModules = parseInt(get('Active Modules'), 10);
@@ -902,8 +1021,334 @@ function renderCrossCheck(target, registryRow) {
     + rowHtml('HYG / Crown', frampHygCrownText, qcHygCrownText, hygCrownState);
 }
 
-// Populates the shared spec+pipeline detail panel for a given serial — used by both
-// single-serial search and the month-search sidebar, so both modes render identically.
+// ═══════════════════════════════════════════════════════════════════════════
+// ─── SYSTEM TESTING — INFLUX QC (CSV upload, threshold checks, overrides) ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+let influxQcDefaults = { cellDelta: 5, modDelta: 20 }; // fallback until the sheet loads
+let influxQcDefaultsLoaded = false;
+let iqParsedData = null;   // { fieldTimeValue, dataStart, dataEnd }
+let iqComputed = null;     // raw computed values/results from runInfluxQc()
+let iqOverrides = {};      // { checkKey: true } — user has bypassed a fail to pass
+let iqFileName = null;
+
+async function loadInfluxQcDefaults() {
+  const key = INFLUX_QC_SHEET.fileId + '::' + INFLUX_QC_SHEET.sheetName;
+  let rows = sheetCache[key];
+  if (!rows) {
+    try {
+      rows = await fetchSheetRows(INFLUX_QC_SHEET.fileId, INFLUX_QC_SHEET.sheetName, INFLUX_QC_DEFAULTS_RANGE);
+      sheetCache[key] = rows;
+    } catch (e) {
+      console.error('[loadInfluxQcDefaults]', e.message);
+      return; // keep fallback defaults
+    }
+  }
+  // Row 2 (index 1) = Cell_Delta_Max, Row 3 (index 2) = Mod_Delta_Max, value in column B (index 1)
+  if (rows && rows[1] && rows[1][1] !== undefined && rows[1][1] !== '') influxQcDefaults.cellDelta = parseFloat(rows[1][1]);
+  if (rows && rows[2] && rows[2][1] !== undefined && rows[2][1] !== '') influxQcDefaults.modDelta = parseFloat(rows[2][1]);
+  influxQcDefaultsLoaded = true;
+}
+
+// Renders the initial (pre-upload) state of the Influx QC panel for the given serial.
+async function ensureInfluxQcPanelInit() {
+  if (!influxQcDefaultsLoaded) await loadInfluxQcDefaults();
+  // Reset per-serial state whenever we (re)enter the panel for a given serial.
+  iqParsedData = null; iqComputed = null; iqOverrides = {}; iqFileName = null;
+  renderInfluxQcPanel();
+}
+
+function renderInfluxQcPanel() {
+  const panel = document.getElementById('influxQcPanel');
+  panel.classList.add('show');
+
+  let html = `
+    <div class="upload-box" id="iqUploadBox" onclick="document.getElementById('iqFileInput').click()">
+      <div class="ub-icon">⬆</div>
+      <div>${iqFileName ? 'Replace uploaded CSV' : 'Click to upload the Influx CSV export for this unit'}</div>
+      ${iqFileName ? `<div class="ub-filename">${iqFileName}</div>` : ''}
+      <input type="file" id="iqFileInput" accept=".csv" style="display:none;" onchange="handleInfluxCsvUpload(event)">
+    </div>
+
+    <div class="iq-threshold-row">
+      <div class="iq-threshold-field">
+        <label>Cell_Delta Max</label>
+        <input type="number" id="iqCellDeltaThresh" value="${influxQcDefaults.cellDelta}" step="0.1">
+      </div>
+      <div class="iq-threshold-field">
+        <label>Mod_Delta Max</label>
+        <input type="number" id="iqModDeltaThresh" value="${influxQcDefaults.modDelta}" step="0.1">
+      </div>
+      <button class="iq-run-btn" id="iqRunBtn" onclick="runInfluxQcClick()" ${iqParsedData ? '' : 'disabled'}>▶ Run QC</button>
+      <div class="iq-threshold-hint">Defaults from sheet (${influxQcDefaults.cellDelta} / ${influxQcDefaults.modDelta}). Editing here only affects this run — not the global default.</div>
+    </div>
+
+    <div id="iqResultsArea"></div>
+  `;
+  panel.innerHTML = html;
+}
+
+function handleInfluxCsvUpload(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+  iqFileName = file.name;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      iqParsedData = parseInfluxCsv(e.target.result);
+      renderInfluxQcPanel();
+      document.getElementById('iqResultsArea').innerHTML = `<div class="iq-history-note">CSV parsed — ${Object.keys(iqParsedData.fieldTimeValue).length} field(s) found. Click "Run QC" to check against thresholds.</div>`;
+    } catch (err) {
+      renderInfluxQcPanel();
+      document.getElementById('iqResultsArea').innerHTML = `<div class="spec-empty" style="color:var(--danger);">Could not parse this CSV: ${err.message}</div>`;
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Parses an Influx annotated CSV export (the format from query results like query__1_.csv):
+// finds the header row (,result,table,_start,_stop,_time,_value,_field,_measurement),
+// then builds fieldTimeValue[field][isoTime] = numericValue for every data row.
+function parseInfluxCsv(text) {
+  const lines = text.split(/\r?\n/);
+  let headerIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].indexOf(',result,table,_start,_stop,_time,_value,_field,_measurement') !== -1) { headerIdx = i; break; }
+  }
+  if (headerIdx === -1) throw new Error('Could not find the expected Influx CSV header row.');
+
+  const fieldTimeValue = {};
+  let dataStart = null, dataEnd = null, allTimesSet = new Set();
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line || !line.trim()) continue;
+    const cols = line.split(',');
+    if (cols.length < 9) continue;
+    const start = cols[3], stop = cols[4], time = cols[5], rawVal = cols[6], field = cols[7];
+    if (!field || !time) continue;
+    if (!dataStart) dataStart = start;
+    if (!dataEnd) dataEnd = stop;
+    const val = parseFloat(rawVal);
+    if (isNaN(val)) continue;
+    if (!fieldTimeValue[field]) fieldTimeValue[field] = {};
+    fieldTimeValue[field][time] = val;
+    allTimesSet.add(time);
+  }
+  if (Object.keys(fieldTimeValue).length === 0) throw new Error('No data rows found under the header.');
+  return { fieldTimeValue, dataStart, dataEnd };
+}
+
+// Runs the finalized QC logic (Block A / B / C) against parsed Influx data + this unit's Framp spec.
+function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
+  const ftv = parsed.fieldTimeValue;
+  const get = (field, time) => (ftv[field] && ftv[field][time] !== undefined) ? ftv[field][time] : null;
+
+  const stateTimes = ftv.State ? Object.keys(ftv.State).sort() : [];
+  if (stateTimes.length === 0) throw new Error('No "State" field found in this CSV — cannot locate the final rest window.');
+  const lastTime = stateTimes[stateTimes.length - 1];
+
+  // ── Block A: final row only ──
+  const anyFault = get('Any_Fault', lastTime);
+  const anyWarning = get('Any_Warning', lastTime);
+  const bms1 = get('BMS_Error_Code_1', lastTime);
+  const bms2 = get('BMS_Error_Code_2', lastTime);
+  const cellDelta = get('Cell_Delta', lastTime);
+  const modDelta = get('Mod_Delta', lastTime);
+
+  // ── Block B: last State≈1 (charging) window before current drops back to 0 ──
+  // Only count a State≈1 row as "charging" if it actually carries meaningful current —
+  // a State=1 row with ~0A is a transition blip (e.g. coming out of a fault lockout), not real charging.
+  let lastCharge = null;
+  for (const t of stateTimes) {
+    const st = get('State', t);
+    const cur = get('Main_Current', t);
+    if (st !== null && Math.round(st) === 1 && cur !== null && Math.abs(cur) >= 0.5) {
+      lastCharge = { time: t, current: cur };
+    } else if (lastCharge && cur !== null && Math.abs(cur) < 0.5) {
+      break;
+    }
+  }
+
+  // ── Block C: voltage & baud, final row ──
+  const voltage = get('Voltage_Level', lastTime);
+  const baud = get('CAN1_Baud', lastTime);
+
+  // ── Compare against Framp / registry expectations ──
+  const chargeRateExpected = parseFloat(regField(registryRow, 'Charge Rate (A)'));
+  const actualV = regField(registryRow, 'Actual System Voltage'), packV = regField(registryRow, 'Pack Voltage');
+  const voltageExpected = actualV ? parseFloat(actualV) : (packV ? parseFloat(packV) : NaN);
+
+  const checks = [];
+  const passFail = (v, ok) => ({ value: v, pass: ok });
+
+  checks.push({ key: 'anyFault', label: 'Any_Fault', block: 'A — Final Rest Window', value: anyFault, expected: '0',
+    pass: anyFault === 0, detail: anyFault === null ? 'Not found in CSV' : `Value: ${anyFault}` });
+  checks.push({ key: 'anyWarning', label: 'Any_Warning', block: 'A — Final Rest Window', value: anyWarning, expected: '0',
+    pass: anyWarning === 0, detail: anyWarning === null ? 'Not found in CSV' : `Value: ${anyWarning}` });
+  checks.push({ key: 'bms1', label: 'BMS_Error_Code_1', block: 'A — Final Rest Window', value: bms1, expected: '0',
+    pass: bms1 === 0, detail: bms1 === null ? 'Not found in CSV' : `Value: ${bms1}` });
+  checks.push({ key: 'bms2', label: 'BMS_Error_Code_2', block: 'A — Final Rest Window', value: bms2, expected: '0',
+    pass: bms2 === 0, detail: bms2 === null ? 'Not found in CSV' : `Value: ${bms2}` });
+  checks.push({ key: 'cellDelta', label: 'Cell_Delta', block: 'A — Final Rest Window', value: cellDelta, expected: `≤ ${cellDeltaThresh}`,
+    pass: cellDelta !== null && cellDelta <= cellDeltaThresh, detail: cellDelta === null ? 'Not found in CSV' : `Value: ${cellDelta.toFixed(2)} (threshold ${cellDeltaThresh})`,
+    thresholdUsed: cellDeltaThresh });
+  checks.push({ key: 'modDelta', label: 'Mod_Delta', block: 'A — Final Rest Window', value: modDelta, expected: `≤ ${modDeltaThresh}`,
+    pass: modDelta !== null && modDelta <= modDeltaThresh, detail: modDelta === null ? 'Not found in CSV' : `Value: ${modDelta.toFixed(2)} (threshold ${modDeltaThresh})`,
+    thresholdUsed: modDeltaThresh });
+
+  const mainCurrentActual = lastCharge ? lastCharge.current : null;
+  checks.push({ key: 'chargeRate', label: 'Main Current vs. Charge Rate', block: 'B — Charge Verification',
+    value: mainCurrentActual, expected: isNaN(chargeRateExpected) ? '— not on file' : chargeRateExpected + 'A',
+    pass: !isNaN(chargeRateExpected) && mainCurrentActual !== null && Math.abs(mainCurrentActual - chargeRateExpected) <= 5,
+    detail: lastCharge ? `Actual: ${mainCurrentActual}A at ${lastCharge.time}` : 'No charging (State=1) window found in CSV' });
+
+  checks.push({ key: 'voltage', label: 'Voltage Level', block: 'C — Voltage & Baud',
+    value: voltage, expected: isNaN(voltageExpected) ? '— not on file' : `${voltageExpected}V ±3`,
+    pass: !isNaN(voltageExpected) && voltage !== null && Math.abs(voltage - voltageExpected) <= 3,
+    detail: voltage === null ? 'Not found in CSV' : `Actual: ${voltage.toFixed(2)}V` });
+
+  checks.push({ key: 'baud', label: 'CAN1_Baud', block: 'C — Voltage & Baud',
+    value: baud, expected: IQ_STANDARD_BAUD,
+    pass: baud === IQ_STANDARD_BAUD,
+    detail: baud === null ? 'Not found in CSV' : `Actual: ${baud}` });
+
+  return { lastTime, lastCharge, checks, chargeRateExpected, voltageExpected };
+}
+
+function runInfluxQcClick() {
+  if (!iqParsedData) return;
+  const registryRow = getRegistryRow(currentSerial);
+  const cellDeltaThresh = parseFloat(document.getElementById('iqCellDeltaThresh').value);
+  const modDeltaThresh = parseFloat(document.getElementById('iqModDeltaThresh').value);
+  try {
+    iqComputed = runInfluxQc(iqParsedData, registryRow, cellDeltaThresh, modDeltaThresh);
+    iqOverrides = {};
+    renderInfluxQcResults();
+  } catch (err) {
+    document.getElementById('iqResultsArea').innerHTML = `<div class="spec-empty" style="color:var(--danger);">${err.message}</div>`;
+  }
+}
+
+function toggleIqOverride(key, checked) {
+  if (checked) iqOverrides[key] = true; else delete iqOverrides[key];
+  renderInfluxQcResults();
+}
+
+function renderInfluxQcResults() {
+  const area = document.getElementById('iqResultsArea');
+  if (!iqComputed) { area.innerHTML = ''; return; }
+
+  const checks = iqComputed.checks;
+  const effectivePass = (c) => c.pass || !!iqOverrides[c.key];
+  const passCount = checks.filter(effectivePass).length;
+  const failCount = checks.length - passCount;
+  const overallPass = failCount === 0;
+
+  const blocks = [...new Set(checks.map(c => c.block))];
+
+  let html = `
+    <div class="iq-summary">
+      <span class="iq-summary-chip ${overallPass ? 'pass' : 'fail'}">${overallPass ? '✓ Overall PASS' : `✗ Overall FAIL (${failCount} open)`}</span>
+      <span class="iq-summary-chip info">Final window: ${iqComputed.lastTime || '—'}</span>
+      ${Object.keys(iqOverrides).length ? `<span class="iq-summary-chip info" style="color:var(--amber); border-color:var(--amber-dim); background:var(--amber-dim);">${Object.keys(iqOverrides).length} manually overridden</span>` : ''}
+    </div>
+  `;
+
+  blocks.forEach(block => {
+    html += `<div class="iq-block-title">${block}</div>`;
+    checks.filter(c => c.block === block).forEach(c => {
+      const isOverridden = !!iqOverrides[c.key];
+      const displayPass = effectivePass(c);
+      html += `
+        <div class="iq-check">
+          <div class="iq-check-left">
+            <div class="iq-dot ${displayPass ? 'pass' : 'fail'}"></div>
+            <div class="iq-text">
+              <div class="iq-label">${c.label}${isOverridden ? '<span class="iq-override-tag">Overridden</span>' : ''}</div>
+              <div class="iq-detail">${c.detail} · Expected: ${c.expected}</div>
+            </div>
+          </div>
+          <div class="iq-switch-wrap">
+            <label class="iq-switch">
+              <input type="checkbox" ${displayPass ? 'checked' : ''} ${c.pass ? 'disabled' : ''}
+                onchange="toggleIqOverride('${c.key}', this.checked)">
+              <span class="iq-slider"></span>
+            </label>
+            <span class="iq-switch-label">${c.pass ? 'auto pass' : (isOverridden ? 'bypassed' : 'bypass')}</span>
+          </div>
+        </div>`;
+    });
+  });
+
+  html += `<button class="iq-save-btn" id="iqSaveBtn" onclick="saveInfluxQcResult()">💾 Save Result to Registry</button>
+           <div class="iq-save-status" id="iqSaveStatus"></div>`;
+
+  area.innerHTML = html;
+}
+
+async function saveInfluxQcResult() {
+  if (!iqComputed || !currentSerial) return;
+  const btn = document.getElementById('iqSaveBtn');
+  const status = document.getElementById('iqSaveStatus');
+  btn.disabled = true;
+  status.textContent = 'Saving...';
+
+  const checks = iqComputed.checks;
+  const byKey = {};
+  checks.forEach(c => { byKey[c.key] = c; });
+  const resultFor = (key) => {
+    const c = byKey[key];
+    if (!c) return { value: '', result: '', override: '' };
+    const overridden = !!iqOverrides[key];
+    return {
+      value: c.value === null || c.value === undefined ? '' : c.value,
+      result: c.pass ? 'PASS' : 'FAIL',
+      override: overridden ? 'PASS' : ''
+    };
+  };
+
+  const af = resultFor('anyFault'), aw = resultFor('anyWarning'), b1 = resultFor('bms1'), b2 = resultFor('bms2');
+  const cd = resultFor('cellDelta'), md = resultFor('modDelta'), cr = resultFor('chargeRate'), vt = resultFor('voltage'), bd = resultFor('baud');
+
+  const overallPass = checks.every(c => c.pass || iqOverrides[c.key]);
+
+  const row = [
+    currentSerial,                                   // A Serial
+    new Date().toISOString(),                        // B Run Timestamp
+    iqParsedData.dataStart || '',                     // C Data Start
+    iqParsedData.dataEnd || '',                        // D Data End
+    af.value, af.result, af.override,                  // E F G
+    aw.value, aw.result, aw.override,                   // H I J
+    b1.value, b1.result, b1.override,                   // K L M
+    b2.value, b2.result, b2.override,                    // N O P
+    cd.value, byKey.cellDelta ? byKey.cellDelta.thresholdUsed : '', cd.result, cd.override,   // Q R S T
+    md.value, byKey.modDelta ? byKey.modDelta.thresholdUsed : '', md.result, md.override,      // U V W X
+    isNaN(iqComputed.chargeRateExpected) ? '' : iqComputed.chargeRateExpected, cr.value, cr.result, cr.override, // Y Z AA AB
+    isNaN(iqComputed.voltageExpected) ? '' : iqComputed.voltageExpected, vt.value, vt.result, vt.override,        // AC AD AE AF
+    IQ_STANDARD_BAUD, bd.value, bd.result, bd.override,  // AG AH AI AJ
+    overallPass ? 'PASS' : 'FAIL',                          // AK
+    ''                                                        // AL Reviewed By (left blank — fill in-sheet if needed)
+  ];
+
+  try {
+    const range = encodeURIComponent(`${INFLUX_QC_SHEET.sheetName}!A5:AL5`);
+    const resp = await fetch(`${SHEETS_API}/${INFLUX_QC_SHEET.fileId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [row] })
+    });
+    if (!resp.ok) { const err = await resp.text(); throw new Error(`${resp.status}: ${err.slice(0,200)}`); }
+    status.textContent = `Saved — Overall ${overallPass ? 'PASS' : 'FAIL'} at ${new Date().toLocaleTimeString()}.`;
+    status.style.color = 'var(--success)';
+  } catch (e) {
+    status.textContent = 'Failed to save: ' + e.message;
+    status.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ─── SHIPPING CONFIRMATION (writes REG_SHIP_COL / column AI) ───────────────
 function colLetter(idx0){
   let n = idx0 + 1, s = '';
   while (n > 0){ const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
@@ -929,7 +1374,6 @@ function toggleCcLegend(){
   panel.style.display = 'block';
 }
 
-// ─── SHIPPING CONFIRMATION (writes REG_SHIP_COL / column AI) ───────────────
 function renderShipPanel(target, registryRow){
   const panel = document.getElementById('shipPanel');
   panel.classList.add('show');
@@ -989,18 +1433,19 @@ async function toggleShipConfirm(target){
 
 async function populateDetail(serial) {
   const target = normalizeTarget(serial);
+  currentSerial = target;
+  // Reset to Pipeline+Spec tab whenever a new serial is opened.
+  switchDetailTab('pipeline');
+
   renderSpec(target, serial);
 
-  const regKey = REGISTRY.fileId + '::' + REGISTRY.sheetName;
-  const regRows = sheetCache[regKey];
-  let registryRow = null;
-  if (regRows) {
-    for (let i = 1; i < regRows.length; i++) {
-      if (normalizeTarget(regRows[i][0] || '') === target) { registryRow = regRows[i]; break; }
-    }
-  }
+  const registryRow = getRegistryRow(target);
   renderCrossCheck(target, registryRow);
   renderShipPanel(target, registryRow);
+
+  // Reset (don't auto-run) the Influx QC panel for the newly selected serial — it re-initializes
+  // lazily when the Cross-Verification tab is opened, via ensureInfluxQcPanelInit().
+  iqParsedData = null; iqComputed = null; iqOverrides = {}; iqFileName = null;
 
   if (dashboardMode === 'synced') {
     const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
@@ -1083,6 +1528,19 @@ function monthInputToLabel(val) {
   return (names[idx] || m) + ' ' + y;
 }
 
+// Reads a unit's synced status summary (AG) and returns a simple pass/fail/unknown signal,
+// used to render the scan-at-a-glance status dot in list views.
+function statusDotClass(row) {
+  if (!row) return '';
+  const statusIdx = REGISTRY_COLS.indexOf('Target Month') + 1; // AG
+  const summary = row[statusIdx] || '';
+  if (!summary) return '';
+  if (/:\s*FAIL\b/.test(summary) || /:\s*MISSING\b/.test(summary)) return 'red';
+  const ccLine = summary.split('\n').find(l => l.startsWith('CrossCheck:'));
+  if (ccLine && /^CrossCheck:\s*FAIL/.test(ccLine)) return 'amber';
+  return 'green';
+}
+
 let monthMatches = []; // current month-search result rows, so sidebar clicks don't need to re-search
 
 function runMonthSearch() {
@@ -1125,8 +1583,9 @@ function runMonthSearch() {
   sidebar.innerHTML = matches.map((row, i) => {
     const serial = get(row, 'Serial');
     const client = get(row, 'Client');
+    const dot = statusDotClass(row);
     return `<button class="month-sidebar-item" id="msi-${i}" onclick="selectMonthSerial(${i})">
-      <div class="msi-serial">${serial}</div>
+      <div class="msi-serial"><span class="msi-status-dot ${dot}"></span>${serial}</div>
       <div class="msi-client">${client || '—'}</div>
     </button>`;
   }).join('');
@@ -1186,8 +1645,9 @@ function runShippingList() {
   sidebar.innerHTML = matches.map((row, i) => {
     const serial = get(row, 'Serial');
     const client = get(row, 'Client');
+    const dot = statusDotClass(row);
     return `<button class="month-sidebar-item" id="ssi-${i}" onclick="selectShippingSerial(${i})">
-      <div class="msi-serial">${serial}</div>
+      <div class="msi-serial"><span class="msi-status-dot ${dot}"></span>${serial}</div>
       <div class="msi-client">${client || '—'}</div>
     </button>`;
   }).join('');
