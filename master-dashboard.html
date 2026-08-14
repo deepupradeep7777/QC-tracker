@@ -356,8 +356,7 @@ const SYSTEST_QC_COLS = {
 // Row 1-3 = editable global default thresholds (sheet-only edit, never written by this dashboard).
 // Row 5 = headers, row 6+ = one row per QC run (appended).
 const INFLUX_QC_SHEET = { fileId: REGISTRY.fileId, sheetName: 'SysTest Influx QC' };
-const INFLUX_QC_DEFAULTS_RANGE = 'A1:B3';
-const INFLUX_QC_DATA_RANGE = 'A5:AL'; // header row + all data, used for append anchor
+const INFLUX_QC_FULL_RANGE = 'A1:AL'; // thresholds (rows 1-3) + header (row 5) + every saved run row, all loaded together so past results persist across visits
 const INFLUX_QC_COLS = [
   'Serial','Run Timestamp','Data Start (from CSV)','Data End (from CSV)',
   'Any_Fault Value','Any_Fault Result','Any_Fault Override',
@@ -471,7 +470,7 @@ async function loadAllSheets() {
 
   const toLoad = [
     { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AI' },
-    { fileId: INFLUX_QC_SHEET.fileId, sheetName: INFLUX_QC_SHEET.sheetName, colRange: INFLUX_QC_DEFAULTS_RANGE }
+    { fileId: INFLUX_QC_SHEET.fileId, sheetName: INFLUX_QC_SHEET.sheetName, colRange: INFLUX_QC_FULL_RANGE }
   ];
   if (dashboardMode === 'live') {
     toLoad.push({ fileId: SYSTEST_QC.fileId, sheetName: SYSTEST_QC.sheetName, colRange: null });
@@ -1031,6 +1030,54 @@ let iqParsedData = null;   // { fieldTimeValue, dataStart, dataEnd }
 let iqComputed = null;     // raw computed values/results from runInfluxQc()
 let iqOverrides = {};      // { checkKey: true } — user has bypassed a fail to pass
 let iqFileName = null;
+let iqLastRun = null;      // most recent saved row from SysTest Influx QC sheet for the open serial, or null
+let iqModuleCheck = null;  // module position/serial cross-check result (dashboard-only, not saved to sheet)
+let iqModuleOverrides = {};
+
+// Column indices (0-indexed against INFLUX_QC_COLS) for the 9 core checks, used to render
+// a compact read-only summary of a previously saved run without re-parsing a CSV.
+const LAST_RUN_CHECK_MAP = [
+  ['Any_Fault', 5, 6], ['Any_Warning', 8, 9], ['BMS_Error_Code_1', 11, 12], ['BMS_Error_Code_2', 14, 15],
+  ['Cell_Delta', 18, 19], ['Mod_Delta', 22, 23], ['Charge Rate', 26, 27], ['Voltage', 30, 31], ['Baud', 34, 35]
+];
+
+async function fetchLastInfluxQcRun(target) {
+  try {
+    const rows = await fetchSheetRows(INFLUX_QC_SHEET.fileId, INFLUX_QC_SHEET.sheetName, 'A6:AL');
+    if (!rows || rows.length === 0) return null;
+    const matches = rows.filter(r => normalizeTarget(r[0] || '') === target);
+    if (matches.length === 0) return null;
+    matches.sort((a, b) => new Date(b[1]) - new Date(a[1]));
+    return matches[0];
+  } catch (e) { console.error('[fetchLastInfluxQcRun]', e.message); return null; }
+}
+
+function renderLastRunSummary() {
+  if (!iqLastRun) return `<div id="iqLastRunBox"></div>`;
+  const overall = iqLastRun[36] || '';
+  const reviewedBy = iqLastRun[37] || '';
+  const runTime = iqLastRun[1] ? new Date(iqLastRun[1]).toLocaleString() : '—';
+  const chips = LAST_RUN_CHECK_MAP.map(([label, ri, oi]) => {
+    const result = iqLastRun[ri] || '';
+    const overridden = !!iqLastRun[oi];
+    const pass = result === 'PASS' || overridden;
+    return `<div class="iq-check" style="padding:8px 14px; margin-bottom:5px;">
+      <div class="iq-check-left">
+        <div class="iq-dot ${pass ? 'pass' : 'fail'}"></div>
+        <div class="iq-text"><div class="iq-label" style="font-size:12.5px;">${label}${overridden ? '<span class="iq-override-tag">Overridden</span>' : ''}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+  return `
+    <div id="iqLastRunBox" class="spec-panel show" style="margin-bottom:18px; border-color:${overall === 'PASS' ? 'var(--success-dim)' : 'var(--danger-dim)'};">
+      <div class="spec-header">
+        <div class="name" style="font-size:15px;">Last saved result — ${overall === 'PASS' ? '✓ PASS' : '✗ FAIL'}</div>
+        <div class="meta">${runTime}${reviewedBy ? ' · Reviewed by ' + reviewedBy : ''}</div>
+      </div>
+      ${chips}
+      <div class="iq-history-note">This is the most recent saved run for this serial. Upload a new CSV below to run again.</div>
+    </div>`;
+}
 
 async function loadInfluxQcDefaults() {
   const key = INFLUX_QC_SHEET.fileId + '::' + INFLUX_QC_SHEET.sheetName;
@@ -1055,6 +1102,11 @@ async function ensureInfluxQcPanelInit() {
   if (!influxQcDefaultsLoaded) await loadInfluxQcDefaults();
   // Reset per-serial state whenever we (re)enter the panel for a given serial.
   iqParsedData = null; iqComputed = null; iqOverrides = {}; iqFileName = null;
+  iqModuleCheck = null; iqModuleOverrides = {};
+  const panel = document.getElementById('influxQcPanel');
+  panel.classList.add('show');
+  panel.innerHTML = `<div class="spec-empty">Loading last saved result…</div>`;
+  iqLastRun = currentSerial ? await fetchLastInfluxQcRun(currentSerial) : null;
   renderInfluxQcPanel();
 }
 
@@ -1062,7 +1114,7 @@ function renderInfluxQcPanel() {
   const panel = document.getElementById('influxQcPanel');
   panel.classList.add('show');
 
-  let html = `
+  let html = renderLastRunSummary() + `
     <div class="upload-box" id="iqUploadBox" onclick="document.getElementById('iqFileInput').click()">
       <div class="ub-icon">⬆</div>
       <div>${iqFileName ? 'Replace uploaded CSV' : 'Click to upload the Influx CSV export for this unit'}</div>
@@ -1181,8 +1233,8 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
   const checks = [];
   const passFail = (v, ok) => ({ value: v, pass: ok });
 
-  checks.push({ key: 'anyFault', label: 'Any_Fault', block: 'A — Final Rest Window', value: anyFault, expected: '0',
-    pass: anyFault === 0, detail: anyFault === null ? 'Not found in CSV' : `Value: ${anyFault}` });
+  checks.push({ key: 'anyFault', label: 'Any_Fault', block: 'A — Final Rest Window', value: anyFault, expected: '≤ 0.6',
+    pass: anyFault !== null && anyFault <= 0.6, detail: anyFault === null ? 'Not found in CSV' : `Value: ${anyFault}` });
   checks.push({ key: 'anyWarning', label: 'Any_Warning', block: 'A — Final Rest Window', value: anyWarning, expected: '0',
     pass: anyWarning === 0, detail: anyWarning === null ? 'Not found in CSV' : `Value: ${anyWarning}` });
   checks.push({ key: 'bms1', label: 'BMS_Error_Code_1', block: 'A — Final Rest Window', value: bms1, expected: '0',
@@ -1215,17 +1267,134 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
   return { lastTime, lastCharge, checks, chargeRateExpected, voltageExpected };
 }
 
-function runInfluxQcClick() {
+// Cross-checks the Influx CSV's live position→serial map (m01_serial, m02_serial, ...) against
+// BOTH the System Testing QC form's typed module list AND the Module QC "Passed" sheet — same
+// underlying sources as the existing Module QC pipeline stage, reused here via aggregateModuleQC().
+// Dashboard-only: the SysTest Influx QC sheet has no columns reserved for this yet, so results
+// here are NOT included in the saved Overall Result and NOT written to the sheet.
+async function computeModuleCrossCheck(parsed, target) {
+  const influxModules = {}; // position (no leading zero) -> serial read live from the unit
+  Object.keys(parsed.fieldTimeValue).forEach(field => {
+    const m = field.match(/^m(\d+)_serial$/i);
+    if (!m) return;
+    const pos = String(parseInt(m[1], 10));
+    const times = Object.keys(parsed.fieldTimeValue[field]).sort();
+    const lastT = times[times.length - 1];
+    influxModules[pos] = parsed.fieldTimeValue[field][lastT];
+  });
+
+  const moduleStage = STAGES.find(s => s.id === 'module');
+  const moduleKey = moduleStage.fileId + '::' + (moduleStage.sheetName || 'Sheet1');
+  const systestKey = moduleStage.systestFileId + '::' + (moduleStage.systestSheetName || 'Sheet1');
+  let moduleRows = sheetCache[moduleKey];
+  if (!moduleRows) { moduleRows = await fetchSheetRows(moduleStage.fileId, moduleStage.sheetName || 'Sheet1'); sheetCache[moduleKey] = moduleRows; }
+  let systestRows = sheetCache[systestKey];
+  if (!systestRows) { systestRows = await fetchSheetRows(moduleStage.systestFileId, moduleStage.systestSheetName || 'Sheet1'); sheetCache[systestKey] = systestRows; }
+
+  const { found, modules } = aggregateModuleQC(systestRows, moduleRows, target); // [{position, moduleId, passed, qcName}]
+  const systestMap = {};
+  modules.forEach(m => { systestMap[String(m.position)] = m; });
+
+  const allPositions = [...new Set([...Object.keys(influxModules), ...Object.keys(systestMap)])].sort((a, b) => parseInt(a) - parseInt(b));
+  const rows = allPositions.map(pos => {
+    const influxSerial = influxModules[pos] !== undefined ? String(Math.round(influxModules[pos])) : null;
+    const st = systestMap[pos];
+    const systestSerial = st ? st.moduleId : null;
+    const posSerialMatch = influxSerial !== null && systestSerial !== null && influxSerial === systestSerial;
+    const qcPassed = st ? st.passed : null;
+    return { position: pos, influxSerial, systestSerial, posSerialMatch, qcPassed, qcName: st ? st.qcName : '—', foundInSystest: !!st };
+  });
+
+  const registryRow = getRegistryRow(target);
+  const expectedCount = parseInt(regField(registryRow, 'Active Modules'), 10);
+  const influxCount = Object.keys(influxModules).length;
+
+  return { found, rows, expectedCount, influxCount };
+}
+
+function toggleIqModuleOverride(key, checked) {
+  if (checked) iqModuleOverrides[key] = true; else delete iqModuleOverrides[key];
+  renderModuleCrossCheckBlock();
+}
+
+function renderModuleCrossCheckBlock() {
+  const el = document.getElementById('iqModuleCheckArea');
+  if (!el) return;
+  if (!iqModuleCheck) { el.innerHTML = ''; return; }
+
+  const mc = iqModuleCheck;
+  const countPass = !isNaN(mc.expectedCount) && mc.influxCount === mc.expectedCount;
+  const countOverridden = !!iqModuleOverrides['modCount'];
+  let html = `<div class="iq-block-title">D — Module Position &amp; Serial <span style="color:var(--text-faint); text-transform:none; letter-spacing:0;">(dashboard-only — not saved to sheet yet)</span></div>`;
+
+  html += `
+    <div class="iq-check">
+      <div class="iq-check-left">
+        <div class="iq-dot ${(countPass || countOverridden) ? 'pass' : 'fail'}"></div>
+        <div class="iq-text">
+          <div class="iq-label">Module Count${countOverridden ? '<span class="iq-override-tag">Overridden</span>' : ''}</div>
+          <div class="iq-detail">Influx: ${mc.influxCount} · Expected (Framp): ${isNaN(mc.expectedCount) ? '—' : mc.expectedCount}</div>
+        </div>
+      </div>
+      <div class="iq-switch-wrap">
+        <label class="iq-switch">
+          <input type="checkbox" ${(countPass || countOverridden) ? 'checked' : ''} ${countPass ? 'disabled' : ''}
+            onchange="toggleIqModuleOverride('modCount', this.checked)">
+          <span class="iq-slider"></span>
+        </label>
+        <span class="iq-switch-label">${countPass ? 'auto pass' : (countOverridden ? 'bypassed' : 'bypass')}</span>
+      </div>
+    </div>`;
+
+  mc.rows.forEach(r => {
+    const key = 'modPos_' + r.position;
+    const rowPass = r.posSerialMatch && r.qcPassed === true;
+    const overridden = !!iqModuleOverrides[key];
+    const displayPass = rowPass || overridden;
+    let detail;
+    if (!r.foundInSystest) detail = `Influx serial: ${r.influxSerial || '—'} · Not in System Testing QC module list`;
+    else if (r.influxSerial === null) detail = `System Testing QC serial: ${r.systestSerial} · Not present in Influx CSV`;
+    else detail = `Influx: ${r.influxSerial} · System Testing QC: ${r.systestSerial} · ${r.posSerialMatch ? 'Serials match' : 'Serial MISMATCH'} · Module QC: ${r.qcPassed === true ? '✓ ' + r.qcName : r.qcPassed === false ? '✗ not in QC Passed' : '— unknown'}`;
+    html += `
+      <div class="iq-check">
+        <div class="iq-check-left">
+          <div class="iq-dot ${displayPass ? 'pass' : 'fail'}"></div>
+          <div class="iq-text">
+            <div class="iq-label">Position ${r.position}${overridden ? '<span class="iq-override-tag">Overridden</span>' : ''}</div>
+            <div class="iq-detail">${detail}</div>
+          </div>
+        </div>
+        <div class="iq-switch-wrap">
+          <label class="iq-switch">
+            <input type="checkbox" ${displayPass ? 'checked' : ''} ${rowPass ? 'disabled' : ''}
+              onchange="toggleIqModuleOverride('${key}', this.checked)">
+            <span class="iq-slider"></span>
+          </label>
+          <span class="iq-switch-label">${rowPass ? 'auto pass' : (overridden ? 'bypassed' : 'bypass')}</span>
+        </div>
+      </div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+async function runInfluxQcClick() {
   if (!iqParsedData) return;
   const registryRow = getRegistryRow(currentSerial);
   const cellDeltaThresh = parseFloat(document.getElementById('iqCellDeltaThresh').value);
   const modDeltaThresh = parseFloat(document.getElementById('iqModDeltaThresh').value);
+  const btn = document.getElementById('iqRunBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Running...'; }
   try {
     iqComputed = runInfluxQc(iqParsedData, registryRow, cellDeltaThresh, modDeltaThresh);
     iqOverrides = {};
+    iqModuleOverrides = {};
+    iqModuleCheck = await computeModuleCrossCheck(iqParsedData, currentSerial);
     renderInfluxQcResults();
   } catch (err) {
     document.getElementById('iqResultsArea').innerHTML = `<div class="spec-empty" style="color:var(--danger);">${err.message}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Run QC'; }
   }
 }
 
@@ -1280,10 +1449,14 @@ function renderInfluxQcResults() {
     });
   });
 
+  html += `<div id="iqModuleCheckArea"></div>`;
+
   html += `<button class="iq-save-btn" id="iqSaveBtn" onclick="saveInfluxQcResult()">💾 Save Result to Registry</button>
-           <div class="iq-save-status" id="iqSaveStatus"></div>`;
+           <div class="iq-save-status" id="iqSaveStatus"></div>
+           <div class="iq-history-note">Saving records the 9 checks above (Blocks A/B/C) to the sheet. The Module Position &amp; Serial block is shown here for review but isn't written to the sheet yet.</div>`;
 
   area.innerHTML = html;
+  renderModuleCrossCheckBlock();
 }
 
 async function saveInfluxQcResult() {
@@ -1340,6 +1513,9 @@ async function saveInfluxQcResult() {
     if (!resp.ok) { const err = await resp.text(); throw new Error(`${resp.status}: ${err.slice(0,200)}`); }
     status.textContent = `Saved — Overall ${overallPass ? 'PASS' : 'FAIL'} at ${new Date().toLocaleTimeString()}.`;
     status.style.color = 'var(--success)';
+    iqLastRun = row; // reflect the just-saved row immediately, without a re-fetch or wiping the results area
+    const lastRunBox = document.getElementById('iqLastRunBox');
+    if (lastRunBox) lastRunBox.outerHTML = renderLastRunSummary();
   } catch (e) {
     status.textContent = 'Failed to save: ' + e.message;
     status.style.color = 'var(--danger)';
