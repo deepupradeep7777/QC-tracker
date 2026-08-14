@@ -225,6 +225,7 @@
       </div>
       <label>Actual System Voltage <span style="color:var(--dim); font-weight:400;">(for Global Config — only differs from Pack above 80V)</span></label>
       <input type="number" id="actualVoltage" placeholder="e.g. 96, 85, 120 — leave blank if same as Pack">
+      <input type="hidden" id="packAh" value="">
       <div class="row2">
         <div><label>Active Modules</label><input type="number" id="modules" value="5" min="1"></div>
         <div><label>Charge Rate (A)</label><input type="number" id="chargeRate" placeholder="e.g. 400" min="1"></div>
@@ -444,10 +445,20 @@ function getMandatorySaveBlockers(){
   return blockers;
 }
 
+// Mirrors render()'s UL derate math exactly, so the Registry always stores the REAL final
+// cancurrent/max_current value for UL units, not the raw pre-derate Charge Rate input.
+function finalChargeRateForRegistry(){
+  const chargeRateInput = document.getElementById('chargeRate').value;
+  const chargeRate = chargeRateInput ? parseInt(chargeRateInput) : 0;
+  if (state.ul !== 'yes') return chargeRate;
+  const ulResult = computeUlConfig();
+  return (ulResult && ulResult.finalCurrent !== undefined) ? ulResult.finalCurrent : chargeRate;
+}
+
 function buildRegistryRow(serialValue){
   const client = document.getElementById('client').value || '';
   const modules = document.getElementById('modules').value || '';
-  const chargeRate = document.getElementById('chargeRate').value || '';
+  const chargeRate = finalChargeRateForRegistry();
   const chargerSel = document.getElementById('charger');
   const chargerLabel = chargerSel.options[chargerSel.selectedIndex] ? chargerSel.options[chargerSel.selectedIndex].text : '';
   const heaterLayoutSel = document.getElementById('heaterLayout');
@@ -729,6 +740,7 @@ function computeUlConfig(){
   const portType = document.getElementById('ulPortType').value;
   const code = country + ports + portType;
   const modules = parseInt(document.getElementById('modules').value) || 0;
+  const chargeRateInput = parseInt(document.getElementById('chargeRate').value) || 0;
 
   const table = {
     '111':{d:400,c:400}, '112':{d:400,c:400}, '121':{d:400,c:600}, '122':{d:400,c:600},
@@ -738,13 +750,26 @@ function computeUlConfig(){
 
   let limits = table[code];
   let note = '';
-  if (table700[code]) note = ' (≥700Ah USA variant available — confirm capacity)';
+  const packAh = parseInt(document.getElementById('packAh').value) || 0;
+  if (country === '1' && packAh >= 700 && table700[code]){
+    limits = table700[code];
+    note = ` (≥700Ah USA variant applied: ${packAh}Ah)`;
+  }
   if (!limits) return {code, discharge:'?', charge:'?', note:'Unrecognized combination'};
 
-  const cap = modules * 100;
-  const derateD = Math.min(limits.d, cap);
-  const derateC = Math.min(limits.c, cap);
-  return {code, discharge:derateD, charge:derateC, derated: (derateD<limits.d || derateC<limits.c), note};
+  // UL FRAMP CURRENT LOGIC (confirmed Aug 2026, not in the written UL Config Guide):
+  // moduleCapacity = #modules x 100A. Compare against the UL Charge limit (with ≥700Ah variant applied).
+  // If moduleCapacity > Charge limit -> port-limited -> NO derate -> enter the stated Charge Rate as-is.
+  // If moduleCapacity < Charge limit -> module-limited -> DERATE -> enter (moduleCapacity - 5A).
+  // The -5A comes off the module capacity number, never off the stated Charge Rate directly.
+  const moduleCapacity = modules * 100;
+  const isPortLimited = moduleCapacity > limits.c;
+  const finalCurrent = isPortLimited ? chargeRateInput : (moduleCapacity - 5);
+
+  return {
+    code, dischargeLimit: limits.d, chargeLimit: limits.c,
+    moduleCapacity, isPortLimited, finalCurrent, note
+  };
 }
 
 function showWarningModal(title, messageHtml){
@@ -792,13 +817,14 @@ function parseSpec(){
     return null;
   };
 
+  // Clear all mandatory fields up front so stale values from a previous paste never survive silently
   document.getElementById('serial').value = '';
   document.getElementById('modules').value = '';
   document.getElementById('chargeRate').value = '';
   document.getElementById('cellSoh').value = '';
   document.getElementById('cvSetting').value = '';
 
-  const issues = [];
+  const issues = []; // consolidated list of everything that needs the user's attention
 
   const clientVal = find('client');
   const siteVal = find('customer site');
@@ -824,6 +850,8 @@ function parseSpec(){
   }
 
   const modelVal = find('model') || '';
+  const packAhMatch = modelVal.match(/(\d+)\s*ah/i);
+  document.getElementById('packAh').value = packAhMatch ? packAhMatch[1] : '';
   const vMatch = modelVal.match(/(\d+)\s*v/i);
   const voltageWarn = document.getElementById('voltageWarning');
   voltageWarn.style.display = 'none';
@@ -891,6 +919,7 @@ function parseSpec(){
     if (cvMatch){ document.getElementById('cvSetting').value = cvMatch[1]; cvFound = true; }
   }
 
+  // An explicit non-100% SOH is itself proof of used (P&S) modules, even with no literal "P&S" text
   const isPns = pnsTrigger || ahMatch || sohNonDefault;
   if (isPns){
     setRadio('sourceRow','source','pns');
@@ -956,6 +985,7 @@ function parseSpec(){
   } else if (/dual/.test(powershelfVal)){
     document.getElementById('ulPorts').value = '2';
   } else {
+    // Fallback: Powershelf doesn't say Single/Dual - check Charge Jumpers leading count
     const jumperCountMatch = chargeJumpersVal.match(/^(\d+)\s*x/);
     if (jumperCountMatch){
       document.getElementById('ulPorts').value = jumperCountMatch[1] === '1' ? '1' : '2';
@@ -963,10 +993,11 @@ function parseSpec(){
   }
 
   if (/schaltbau/.test(powershelfVal)){
-    document.getElementById('ulPortType').value = '2';
+    document.getElementById('ulPortType').value = '2'; // Schaltbau confirmed = LV connector
   } else if (/euro/.test(powershelfVal)){
     document.getElementById('ulPortType').value = '1';
   } else {
+    // Fallback: Powershelf doesn't specify - check Charge/Discharge Jumpers text
     if (/schaltbau/.test(jumpersCombined)){
       document.getElementById('ulPortType').value = '2';
     } else if (/euro/.test(jumpersCombined)){
@@ -988,7 +1019,7 @@ function parseSpec(){
   if (forkliftSel.value === 'other'){
     let reg = '0';
     if (integrationDisabled){
-      reg = '0';
+      reg = '0'; // explicit "do not enable integration" clause overrides HYG hardware mention
     } else if (/hyg/.test(hygValLower)) reg = '1';
     else if (/motrec/.test(hygValLower)) reg = '2';
     else if (/gvip/.test(hygValLower)) reg = '3';
@@ -1009,6 +1040,7 @@ function parseSpec(){
     packaging: find('packaging') || ''
   };
 
+  // ===== MANDATORY FIELD CHECK =====
   const mandatoryMissing = [];
   if (!idVal) mandatoryMissing.push('ID');
   if (!vMatch) mandatoryMissing.push('Module Voltage (24/36/48/80/etc)');
@@ -1086,11 +1118,14 @@ function render(){
   } else if (actualV === 96){
     modsPerString = 2; mod1V = 48; mod2V = 48;
   } else {
+    // covers 80V and other >48V cases (including unconfirmed odd voltages, flagged separately in UI)
     modsPerString = 2; mod1V = 36; mod2V = 48;
   }
 
   const ulOn = state.ul === 'yes';
   const ulResult = ulOn ? computeUlConfig() : null;
+  // For UL units, cancurrent/max_current come from the derated UL table (charge/discharge), not the raw Charge Rate.
+  const ulCurrentFinal = ulOn && ulResult && ulResult.finalCurrent !== undefined ? ulResult.finalCurrent : chargeRate;
 
   const heaterLayoutKey = document.getElementById('heaterLayout').value;
   let heaterSuggestion = null;
@@ -1108,8 +1143,8 @@ function render(){
   const rows = [
     ['AH_RETAIN', 0], ['AH_RETAIN_RAW', 0], ['ahlimit', 4294967295],
     ['active_modules', modules], ['Serial', serial],
-    ['cancurrent', chargeRateMissing ? '— missing' : chargeRate, chargeRateMissing],
-    ['max_current', chargeRateMissing ? '— missing' : chargeRate, chargeRateMissing],
+    ['cancurrent', chargeRateMissing ? '— missing' : ulCurrentFinal, chargeRateMissing],
+    ['max_current', chargeRateMissing ? '— missing' : ulCurrentFinal, chargeRateMissing],
     ['pack', pack], ['charger', charger], ['heaters', heaters ? 'TRUE' : 'FALSE'],
     ['forklift', fk.value], ['can1_baud', 250],
     ['cell_cap', cellCap], ['soc_warn', 10],
@@ -1149,8 +1184,11 @@ function render(){
     html += `<div class="confirm-box"><div class="cb-title">Needs input</div><div class="cb-line">P&amp;S unit — <b>cell_soh</b> has no default and must be entered before this table is final.</div></div>`;
   }
   if (ulOn){
+    const limitLabel = ulResult.isPortLimited
+      ? `Module capacity (${ulResult.moduleCapacity}A) &gt; Charge limit (${ulResult.chargeLimit}A) → <b>port-limited</b> → Charge Rate entered as-is, no derate.`
+      : `Module capacity (${ulResult.moduleCapacity}A) &lt; Charge limit (${ulResult.chargeLimit}A) → <b>module-limited</b> → entered as (module capacity − 5A).`;
     html += `<div class="confirm-box" style="border-color:var(--teal-dim); background:rgba(61,220,151,.06);"><div class="cb-title" style="color:var(--teal);">UL — reference detail</div>
-      <div class="cb-line"><b>ul_config = ${ulResult.code}</b>. Derated limits at ${modules} modules: Discharge <b>${ulResult.discharge}A</b> / Charge <b>${ulResult.charge}A</b>${ulResult.derated ? ' (derated below table max)' : ''}.${ulResult.note}</div></div>`;
+      <div class="cb-line"><b>ul_config = ${ulResult.code}</b> (Discharge limit ${ulResult.dischargeLimit}A / Charge limit ${ulResult.chargeLimit}A)${ulResult.note}.<br>${limitLabel}<br>Final cancurrent/max_current = <b>${ulResult.finalCurrent}A</b>.</div></div>`;
   }
   if (heaters){
     if (heaterFinal){
@@ -1217,6 +1255,7 @@ async function copyTable(){
 
   let success = false;
 
+  // Method 1: modern Clipboard API with rich HTML
   try{
     const item = new ClipboardItem({
       'text/html': new Blob([htmlString], {type:'text/html'}),
@@ -1226,6 +1265,7 @@ async function copyTable(){
     success = true;
   } catch(err){ success = false; }
 
+  // Method 2: hidden DOM selection + execCommand (works in more sandboxed contexts)
   if (!success){
     try{
       const container = document.createElement('div');
@@ -1246,6 +1286,7 @@ async function copyTable(){
     } catch(err2){ success = false; }
   }
 
+  // Method 3: plain text only, last resort
   if (!success){
     try{ await navigator.clipboard.writeText(plainText); success = true; } catch(err3){ success = false; }
   }
@@ -1254,6 +1295,8 @@ async function copyTable(){
   t.textContent = success ? 'Copied to clipboard' : 'Copy blocked — select the table and use Ctrl/Cmd+C';
   t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2200);
+
+  checkAndSaveToRegistry();
 }
 
 const genByEl = document.getElementById('generatedBy');
