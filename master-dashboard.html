@@ -1041,36 +1041,96 @@ let iqModuleCheck = null;
 let iqModuleOverrides = {};
 
 const LAST_RUN_CHECK_MAP = [
-  ['Any_Fault', 5, 6], ['Any_Warning', 8, 9], ['BMS_Error_Code_1', 11, 12], ['BMS_Error_Code_2', 14, 15],
-  ['Cell_Delta', 18, 19], ['Mod_Delta', 22, 23], ['Charge Rate', 26, 27], ['Voltage', 30, 31], ['Baud', 34, 35],
-  ['CAN=Max', 39, 40], ['Main Current Duration', 43, 44]
+  { label: 'Any_Fault', valueIdx: 4, resultIdx: 5, overrideIdx: 6 },
+  { label: 'Any_Warning', valueIdx: 7, resultIdx: 8, overrideIdx: 9 },
+  { label: 'BMS_Error_Code_1', valueIdx: 10, resultIdx: 11, overrideIdx: 12 },
+  { label: 'BMS_Error_Code_2', valueIdx: 13, resultIdx: 14, overrideIdx: 15 },
+  { label: 'Cell_Delta', valueIdx: 16, thresholdIdx: 17, resultIdx: 18, overrideIdx: 19 },
+  { label: 'Mod_Delta', valueIdx: 20, thresholdIdx: 21, resultIdx: 22, overrideIdx: 23 },
+  { label: 'Charge Rate', expectedIdx: 24, valueIdx: 25, resultIdx: 26, overrideIdx: 27 },
+  { label: 'Voltage', expectedIdx: 28, valueIdx: 29, resultIdx: 30, overrideIdx: 31 },
+  { label: 'Baud', expectedIdx: 32, valueIdx: 33, resultIdx: 34, overrideIdx: 35 },
+  { label: 'CAN=Max', valueIdx: 38, resultIdx: 39, overrideIdx: 40 },
+  { label: 'Main Current Duration', valueIdx: 41, thresholdIdx: 42, resultIdx: 43, overrideIdx: 44 }
 ];
 
 async function fetchLastInfluxQcRun(target) {
   try {
     const rows = await fetchSheetRows(INFLUX_QC_SHEET.fileId, INFLUX_QC_SHEET.sheetName, 'A6:AS');
     if (!rows || rows.length === 0) return null;
-    const matches = rows.filter(r => normalizeTarget(r[0] || '') === target);
+    // Row 6 in the sheet = array index 0 here, so sheet row number = 6 + array index - needed to write overrides back.
+    const matches = rows.map((r, i) => ({ row: r, rowNum: 6 + i })).filter(m => normalizeTarget(m.row[0] || '') === target);
     if (matches.length === 0) return null;
-    matches.sort((a, b) => new Date(b[1]) - new Date(a[1]));
-    return matches[0];
+    matches.sort((a, b) => new Date(b.row[1]) - new Date(a.row[1]));
+    return matches[0]; // { row, rowNum }
   } catch (e) { console.error('[fetchLastInfluxQcRun]', e.message); return null; }
+}
+
+async function toggleLastRunOverride(overrideColIdx, checked) {
+  if (!iqLastRun || !accessToken) return;
+  const newVal = checked ? 'PASS' : '';
+  try {
+    const colL = colLetter(overrideColIdx);
+    const range = encodeURIComponent(`${INFLUX_QC_SHEET.sheetName}!${colL}${iqLastRun.rowNum}`);
+    const resp = await fetch(`${SHEETS_API}/${INFLUX_QC_SHEET.fileId}/values/${range}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[newVal]] })
+    });
+    if (!resp.ok) { const err = await resp.text(); throw new Error(`${resp.status}: ${err.slice(0,150)}`); }
+    iqLastRun.row[overrideColIdx] = newVal;
+
+    // Keep Overall Result consistent with the checks - recompute from all 11 and write it back too.
+    const allPass = LAST_RUN_CHECK_MAP.every(c => iqLastRun.row[c.resultIdx] === 'PASS' || !!iqLastRun.row[c.overrideIdx]);
+    const newOverall = allPass ? 'PASS' : 'FAIL';
+    iqLastRun.row[36] = newOverall;
+    const overallRange = encodeURIComponent(`${INFLUX_QC_SHEET.sheetName}!${colLetter(36)}${iqLastRun.rowNum}`);
+    await fetch(`${SHEETS_API}/${INFLUX_QC_SHEET.fileId}/values/${overallRange}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[newOverall]] })
+    });
+
+    const lastRunBox = document.getElementById('iqLastRunBox');
+    if (lastRunBox) lastRunBox.outerHTML = renderLastRunSummary();
+  } catch (e) {
+    alert('Failed to update override: ' + e.message);
+  }
 }
 
 function renderLastRunSummary() {
   if (!iqLastRun) return `<div id="iqLastRunBox"></div>`;
-  const overall = iqLastRun[36] || '';
-  const reviewedBy = iqLastRun[37] || '';
-  const runTime = iqLastRun[1] ? new Date(iqLastRun[1]).toLocaleString() : '—';
-  const chips = LAST_RUN_CHECK_MAP.map(([label, ri, oi]) => {
-    const result = iqLastRun[ri] || '';
-    const overridden = !!iqLastRun[oi];
+  const r = iqLastRun.row;
+  const overall = r[36] || '';
+  const reviewedBy = r[37] || '';
+  const runTime = r[1] ? new Date(r[1]).toLocaleString() : '—';
+  const chips = LAST_RUN_CHECK_MAP.map(c => {
+    const value = c.valueIdx !== undefined ? r[c.valueIdx] : '';
+    const expected = c.expectedIdx !== undefined ? r[c.expectedIdx] : null;
+    const threshold = c.thresholdIdx !== undefined ? r[c.thresholdIdx] : null;
+    const result = r[c.resultIdx] || '';
+    const overridden = !!r[c.overrideIdx];
     const pass = result === 'PASS' || overridden;
+    let detail = 'Value: ' + (value === undefined || value === '' ? '—' : value);
+    if (expected !== null && expected !== '') detail += ' · Expected: ' + expected;
+    if (threshold !== null && threshold !== '') detail += ' · Threshold: ' + threshold;
+    const canOverride = result === 'FAIL'; // only show the toggle for checks that actually failed
     return `<div class="iq-check" style="padding:8px 14px; margin-bottom:5px;">
       <div class="iq-check-left">
         <div class="iq-dot ${pass ? 'pass' : 'fail'}"></div>
-        <div class="iq-text"><div class="iq-label" style="font-size:12.5px;">${label}${overridden ? '<span class="iq-override-tag">Overridden</span>' : ''}</div></div>
+        <div class="iq-text">
+          <div class="iq-label" style="font-size:12.5px;">${c.label}${overridden ? '<span class="iq-override-tag">Overridden</span>' : ''}</div>
+          <div class="iq-detail">${detail}</div>
+        </div>
       </div>
+      ${canOverride ? `
+      <div class="iq-switch-wrap">
+        <label class="iq-switch">
+          <input type="checkbox" ${overridden ? 'checked' : ''} onchange="toggleLastRunOverride(${c.overrideIdx}, this.checked)">
+          <span class="iq-slider"></span>
+        </label>
+        <span class="iq-switch-label">${overridden ? 'bypassed' : 'bypass'}</span>
+      </div>` : ''}
     </div>`;
   }).join('');
   return `
@@ -1571,7 +1631,7 @@ async function saveInfluxQcResult() {
     if (!resp.ok) { const err = await resp.text(); throw new Error(`${resp.status}: ${err.slice(0,200)}`); }
     status.textContent = `Saved — Overall ${overallPass ? 'PASS' : 'FAIL'} at ${new Date().toLocaleTimeString()}.`;
     status.style.color = 'var(--success)';
-    iqLastRun = row;
+    iqLastRun = await fetchLastInfluxQcRun(currentSerial); // re-fetch so we have the real row number for the override buttons
     const lastRunBox = document.getElementById('iqLastRunBox');
     if (lastRunBox) lastRunBox.outerHTML = renderLastRunSummary();
   } catch (e) {
