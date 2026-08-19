@@ -1215,10 +1215,21 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
   const modDelta = get('Mod_Delta', lastTime);
 
   // ── Block B: last State≈1 (charging) window before current drops back to 0 ──
+  // Skips the initial 50A test phase first (same signal as the duration check below - CAN_current==50) -
+  // otherwise a brief near-zero current dip between the test and the real charge ramp can make this loop
+  // break too early and lock onto the 50A test reading instead of the real final charging value.
   let lastCharge = null;
+  let pastInitialTestForLastCharge = false;
   for (const t of stateTimes) {
     const st = get('State', t);
     const cur = get('Main_Current', t);
+    const can = get('CAN_current', t);
+    if (!pastInitialTestForLastCharge) {
+      const isChargingNow = st !== null && Math.round(st) === 1;
+      if (!isChargingNow) continue; // not charging yet (or a gap before it starts) - keep waiting, don't exit skip-mode yet
+      if (can !== null && Math.abs(can - 50) < 0.01) continue; // charging, but still inside the 50A test - skip
+      pastInitialTestForLastCharge = true; // now charging with a real (non-50A) target - proceed normally from here
+    }
     if (st !== null && Math.round(st) === 1 && cur !== null && Math.abs(cur) >= 0.5) {
       lastCharge = { time: t, current: cur };
     } else if (lastCharge && cur !== null && Math.abs(cur) < 0.5) {
