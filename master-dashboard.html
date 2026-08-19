@@ -369,7 +369,7 @@ const SYSTEST_QC_COLS = {
 // Row 5 = headers, row 6+ = one row per QC run (appended).
 const INFLUX_QC_SHEET = { fileId: REGISTRY.fileId, sheetName: 'SysTest Influx QC' };
 const INFLUX_QC_DEFAULTS_RANGE = 'A1:B3';
-const INFLUX_QC_FULL_RANGE = 'A1:AS'; // thresholds (rows 1-3) + header (row 5) + every saved run row, all loaded together so past results persist across visits
+const INFLUX_QC_FULL_RANGE = 'A1:AY'; // thresholds (rows 1-3) + header (row 5) + every saved run row, all loaded together so past results persist across visits
 const INFLUX_QC_COLS = [
   'Serial','Run Timestamp','Data Start (from CSV)','Data End (from CSV)',
   'Any_Fault Value','Any_Fault Result','Any_Fault Override',
@@ -383,9 +383,10 @@ const INFLUX_QC_COLS = [
   'Baud Expected (Framp)','Baud Actual (Influx)','Baud Result','Baud Override',
   'Overall Result','Reviewed By',
   'CAN=Max Value','CAN=Max Result','CAN=Max Override',
-  'Main Current Duration Value','Main Current Duration Threshold Used','Main Current Duration Result','Main Current Duration Override'
-]; // 45 cols, A..AS — CAN=Max + Main Current Duration appended at the end (AM-AS) so the original AK/AL
-   // (Overall Result / Reviewed By) columns keep their existing position and any historical data intact.
+  'Main Current Duration Value','Main Current Duration Threshold Used','Main Current Duration Result','Main Current Duration Override',
+  'Module Count Value','Module Count Result','Module Count Override',
+  'Module Position Value','Module Position Result','Module Position Override'
+]; // 51 cols, A..AY — Module Count/Position appended at the end (AT-AY), same append-only pattern as before.
 const IQ_STANDARD_BAUD = 250; // your CAN1_Baud standard — Registry doesn't carry a baud column, so this is the fixed expectation
 
 // Same 7 stages/fileIds as the QC Tracker (Google Cloud OAuth version) — kept in sync manually.
@@ -1051,12 +1052,14 @@ const LAST_RUN_CHECK_MAP = [
   { label: 'Voltage', expectedIdx: 28, valueIdx: 29, resultIdx: 30, overrideIdx: 31 },
   { label: 'Baud', expectedIdx: 32, valueIdx: 33, resultIdx: 34, overrideIdx: 35 },
   { label: 'CAN=Max', valueIdx: 38, resultIdx: 39, overrideIdx: 40 },
-  { label: 'Main Current Duration', valueIdx: 41, thresholdIdx: 42, resultIdx: 43, overrideIdx: 44 }
+  { label: 'Main Current Duration', valueIdx: 41, thresholdIdx: 42, resultIdx: 43, overrideIdx: 44 },
+  { label: 'Module Count', valueIdx: 45, resultIdx: 46, overrideIdx: 47 },
+  { label: 'Module Position', valueIdx: 48, resultIdx: 49, overrideIdx: 50 }
 ];
 
 async function fetchLastInfluxQcRun(target) {
   try {
-    const rows = await fetchSheetRows(INFLUX_QC_SHEET.fileId, INFLUX_QC_SHEET.sheetName, 'A6:AS');
+    const rows = await fetchSheetRows(INFLUX_QC_SHEET.fileId, INFLUX_QC_SHEET.sheetName, 'A6:AY');
     if (!rows || rows.length === 0) return null;
     // Row 6 in the sheet = array index 0 here, so sheet row number = 6 + array index - needed to write overrides back.
     const matches = rows.map((r, i) => ({ row: r, rowNum: 6 + i })).filter(m => normalizeTarget(m.row[0] || '') === target);
@@ -1438,7 +1441,7 @@ function renderModuleCrossCheckBlock() {
   const mc = iqModuleCheck;
   const countPass = !isNaN(mc.expectedCount) && mc.influxCount === mc.expectedCount;
   const countOverridden = !!iqModuleOverrides['modCount'];
-  let html = `<div class="iq-block-title">D — Module Position &amp; Serial <span style="color:var(--text-faint); text-transform:none; letter-spacing:0;">(dashboard-only — not saved to sheet yet)</span></div>`;
+  let html = `<div class="iq-block-title">D — Module Position &amp; Serial</div>`;
 
   html += `
     <div class="iq-check">
@@ -1572,6 +1575,34 @@ function renderInfluxQcResults() {
   renderModuleCrossCheckBlock();
 }
 
+// Turns iqModuleCheck + any manual overrides into the same compact Value/Result summary shape
+// the automated script saves, so both paths write to the same 6 columns consistently.
+function summarizeModuleCrossCheck(mc, overrides) {
+  if (!mc) return { moduleCount: { value: '', result: '' }, modulePosition: { value: '', result: '' } };
+  const countPass = !isNaN(mc.expectedCount) && mc.influxCount === mc.expectedCount && mc.influxCount > 0;
+  const countOverridden = !!overrides['modCount'];
+  const moduleCount = {
+    value: mc.influxCount + (isNaN(mc.expectedCount) ? '' : '/' + mc.expectedCount),
+    result: (countPass || countOverridden) ? 'PASS' : 'FAIL'
+  };
+
+  const mismatches = [];
+  mc.rows.forEach(r => {
+    const rowPass = r.posSerialMatch && r.qcPassed === true;
+    const overridden = !!overrides['modPos_' + r.position];
+    if (!rowPass && !overridden) {
+      mismatches.push('Pos' + r.position + '(Influx:' + (r.influxSerial || '—') + ',ST:' + (r.systestSerial || '—') + ',QC:' + (r.qcPassed === true ? 'OK' : 'FAIL') + ')');
+    }
+  });
+  const posPass = mismatches.length === 0 && mc.rows.length > 0;
+  const modulePosition = {
+    value: posPass ? (mc.rows.length + ' position(s) matched') : (mismatches.length ? mismatches.join('; ') : 'no module data found'),
+    result: posPass ? 'PASS' : 'FAIL'
+  };
+
+  return { moduleCount, modulePosition };
+}
+
 async function saveInfluxQcResult() {
   if (!iqComputed || !currentSerial) return;
   const btn = document.getElementById('iqSaveBtn');
@@ -1596,10 +1627,12 @@ async function saveInfluxQcResult() {
   const af = resultFor('anyFault'), aw = resultFor('anyWarning'), b1 = resultFor('bms1'), b2 = resultFor('bms2');
   const cd = resultFor('cellDelta'), md = resultFor('modDelta'), cr = resultFor('chargeRate'), vt = resultFor('voltage'), bd = resultFor('baud');
   const cm = resultFor('canMaxConsistency'), dur = resultFor('mainCurrentDuration');
+  const moduleSummary = summarizeModuleCrossCheck(iqModuleCheck, iqModuleOverrides);
 
-  // Overall Result now reflects every check (including CAN=Max and Main Current Duration) —
-  // a fail on either makes the whole run FAIL, per confirmed decision.
-  const overallPass = checks.every(c => c.pass || iqOverrides[c.key]);
+  // Overall Result now reflects every check including CAN=Max, Main Current Duration, and the
+  // Module Position & Serial cross-check - a fail on any of them makes the whole run FAIL.
+  const overallPass = checks.every(c => c.pass || iqOverrides[c.key])
+    && moduleSummary.moduleCount.result === 'PASS' && moduleSummary.modulePosition.result === 'PASS';
 
   const row = [
     currentSerial,
@@ -1618,11 +1651,14 @@ async function saveInfluxQcResult() {
     overallPass ? 'PASS' : 'FAIL',
     '',
     cm.value, cm.result, cm.override,
-    dur.value, byKey.mainCurrentDuration ? 70 : '', dur.result, dur.override
+    dur.value, byKey.mainCurrentDuration ? 70 : '', dur.result, dur.override,
+    moduleSummary.moduleCount.value, moduleSummary.moduleCount.result, iqModuleOverrides['modCount'] ? 'PASS' : '',
+    moduleSummary.modulePosition.value, moduleSummary.modulePosition.result,
+    (Object.keys(iqModuleOverrides).some(k => k !== 'modCount') ? 'PASS' : '')
   ];
 
   try {
-    const range = encodeURIComponent(`${INFLUX_QC_SHEET.sheetName}!A5:AS5`);
+    const range = encodeURIComponent(`${INFLUX_QC_SHEET.sheetName}!A5:AY5`);
     const resp = await fetch(`${SHEETS_API}/${INFLUX_QC_SHEET.fileId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
