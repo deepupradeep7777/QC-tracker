@@ -290,13 +290,14 @@
 
     <!-- Top-level toggle: Pipeline+Spec  vs  Cross-Verification + System Testing Influx -->
     <div class="detail-tabs">
-      <button class="detail-tab-btn active" id="detailTabBtnPipeline" onclick="switchDetailTab('pipeline')">📋 Pipeline &amp; Spec</button>
-      <button class="detail-tab-btn" id="detailTabBtnCross" onclick="switchDetailTab('cross')">🔬 Cross-Verification &amp; System Testing</button>
+      <button class="detail-tab-btn active" id="detailTabBtnPipeline" onclick="switchDetailTab('pipeline')">📋 Pipeline</button>
+      <button class="detail-tab-btn" id="detailTabBtnCross" onclick="switchDetailTab('cross')">🔬 Cross-Verification</button>
+      <button class="detail-tab-btn" id="detailTabBtnSpec" onclick="switchDetailTab('spec')">📄 Spec</button>
     </div>
 
     <div class="detail-panel show" id="detailPanelPipeline">
-      <div class="section-title">Spec &amp; Order Details <span class="badge">Master Battery Registry</span></div>
-      <div class="spec-panel" id="specPanel"></div>
+      <div class="section-title">Shipping <span class="badge">manual confirmation, this dashboard only</span></div>
+      <div class="spec-panel" id="shipPanel"></div>
 
       <div class="section-title">QC Pipeline <span class="badge">7 stages · live from production sheets</span></div>
       <div class="line-wrap">
@@ -304,9 +305,6 @@
         <div class="stages" id="stages"></div>
       </div>
       <div class="results" id="results"></div>
-
-      <div class="section-title">Shipping <span class="badge">manual confirmation, this dashboard only</span></div>
-      <div class="spec-panel" id="shipPanel"></div>
     </div>
 
     <div class="detail-panel" id="detailPanelCross">
@@ -315,6 +313,11 @@
 
       <div class="section-title">System Testing — Influx QC <span class="badge">upload CSV · threshold checks</span></div>
       <div class="spec-panel show" id="influxQcPanel"></div>
+    </div>
+
+    <div class="detail-panel" id="detailPanelSpec">
+      <div class="section-title">Spec &amp; Order Details <span class="badge">Master Battery Registry</span></div>
+      <div class="spec-panel" id="specPanel"></div>
     </div>
   </div>
 
@@ -642,8 +645,10 @@ function setStageUI(id, state, statusText, note, rowText) {
 function switchDetailTab(tab) {
   document.getElementById('detailTabBtnPipeline').classList.toggle('active', tab === 'pipeline');
   document.getElementById('detailTabBtnCross').classList.toggle('active', tab === 'cross');
+  document.getElementById('detailTabBtnSpec').classList.toggle('active', tab === 'spec');
   document.getElementById('detailPanelPipeline').classList.toggle('show', tab === 'pipeline');
   document.getElementById('detailPanelCross').classList.toggle('show', tab === 'cross');
+  document.getElementById('detailPanelSpec').classList.toggle('show', tab === 'spec');
   if (tab === 'cross' && currentSerial) ensureInfluxQcPanelInit();
 }
 
@@ -1187,16 +1192,25 @@ function parseInfluxCsv(text) {
 function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
   const ftv = parsed.fieldTimeValue;
   const get = (field, time) => (ftv[field] && ftv[field][time] !== undefined) ? ftv[field][time] : null;
+  // Finds a field's OWN most recent timestamp and returns its value - used for Any_Fault/Any_Warning/
+  // BMS_Error_Code_1/2, so each is checked at the true end of its own reporting cycle rather than
+  // being forced to line up with State's last timestamp (which may not exactly match).
+  const getFieldLastValue = (field) => {
+    if (!ftv[field]) return null;
+    const times = Object.keys(ftv[field]).sort();
+    if (times.length === 0) return null;
+    return ftv[field][times[times.length - 1]];
+  };
 
   const stateTimes = ftv.State ? Object.keys(ftv.State).sort() : [];
   if (stateTimes.length === 0) throw new Error('No "State" field found in this CSV — cannot locate the final rest window.');
   const lastTime = stateTimes[stateTimes.length - 1];
 
-  // ── Block A: final row only ──
-  const anyFault = get('Any_Fault', lastTime);
-  const anyWarning = get('Any_Warning', lastTime);
-  const bms1 = get('BMS_Error_Code_1', lastTime);
-  const bms2 = get('BMS_Error_Code_2', lastTime);
+  // ── Block A: checked at the end of each field's OWN cycle ──
+  const anyFault = getFieldLastValue('Any_Fault');
+  const anyWarning = getFieldLastValue('Any_Warning');
+  const bms1 = getFieldLastValue('BMS_Error_Code_1');
+  const bms2 = getFieldLastValue('BMS_Error_Code_2');
   const cellDelta = get('Cell_Delta', lastTime);
   const modDelta = get('Mod_Delta', lastTime);
 
@@ -1226,12 +1240,20 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
     if (Math.abs(canVal - maxVal) < 0.01) canMaxMatchCount++;
   });
 
+  // There's a fixed 50A test at the start of the charge cycle (a low-current pre-check before
+  // ramping to the real target) - excluded here so it doesn't unfairly drag down the percentage.
+  // Once CAN_current moves off 50A, that's treated as the real charge target and counting begins.
   let durTotalCount = 0, durAtMaxCount = 0;
+  let pastInitialTest = false;
   stateTimes.forEach(t => {
     const st = get('State', t);
     if (st === null || Math.round(st) !== 1) return; // only charging samples, rounded same as Block B above
     const cur = get('Main_Current', t), can = get('CAN_current', t);
     if (cur === null || can === null) return;
+    if (!pastInitialTest) {
+      if (Math.abs(can - 50) < 0.01) return; // still inside the initial 50A test window - skip
+      pastInitialTest = true; // CAN_current has ramped to the real target - start counting from here
+    }
     durTotalCount++;
     if (cur >= (can - 10)) durAtMaxCount++;
   });
