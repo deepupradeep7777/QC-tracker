@@ -293,6 +293,7 @@
       <button class="detail-tab-btn active" id="detailTabBtnPipeline" onclick="switchDetailTab('pipeline')">📋 Pipeline</button>
       <button class="detail-tab-btn" id="detailTabBtnCross" onclick="switchDetailTab('cross')">🔬 Cross-Verification</button>
       <button class="detail-tab-btn" id="detailTabBtnSpec" onclick="switchDetailTab('spec')">📄 Spec</button>
+      <button class="detail-tab-btn" id="detailTabBtnNotes" onclick="switchDetailTab('notes')">📝 System Notes</button>
     </div>
 
     <div class="detail-panel show" id="detailPanelPipeline">
@@ -318,6 +319,14 @@
     <div class="detail-panel" id="detailPanelSpec">
       <div class="section-title">Spec &amp; Order Details <span class="badge">Master Battery Registry</span></div>
       <div class="spec-panel" id="specPanel"></div>
+    </div>
+
+    <div class="detail-panel" id="detailPanelNotes">
+      <div class="section-title">General Comments/Notes for the System <span class="badge">System Testing QC form, column CH</span></div>
+      <div class="spec-panel show" id="systestCommentsPanel"></div>
+
+      <div class="section-title">My Notes <span class="badge">manual entry, this dashboard only</span></div>
+      <div class="spec-panel show" id="userNotesPanel"></div>
     </div>
   </div>
 
@@ -351,6 +360,8 @@ const REGISTRY_COLS = [
 const REG_STATUS_COL = REGISTRY_COLS.indexOf('Target Month') + 1; // 32 = AG
 const REG_SYNCED_COL = REG_STATUS_COL + 1; // 33 = AH
 const REG_SHIP_COL = REG_STATUS_COL + 2; // 34 = AI
+const REG_COMMENTS_COL = REG_SHIP_COL + 1; // 35 = AJ - synced by the script from System Testing QC's General Comments, read-only here
+const REG_NOTES_COL = REG_SHIP_COL + 2; // 36 = AK - user-entered System Notes, this dashboard only
 
 // Real System Testing QC form (full responses, not the trimmed lookup sheet) — used to cross-verify
 // Module Count, Charge Rate, HYG/Crown, and Voltage against what Framp generated.
@@ -361,7 +372,7 @@ const SYSTEST_QC = {
 // 0-indexed column positions, confirmed directly against the sheet's real header row (post-relink).
 const SYSTEST_QC_COLS = {
   timestamp: 0, sysNumber: 16, clientMainFolder: 17, voltage: 22, chargeRate: 25,
-  moduleList: 38, hygEnabled: 56, crownSwitch: 57
+  moduleList: 38, hygEnabled: 56, crownSwitch: 57, generalComments: 85 // column CH
 };
 
 // ── System Testing Influx QC — new tab in the same Registry spreadsheet ─────
@@ -486,7 +497,7 @@ async function loadAllSheets() {
   document.getElementById('searchBtn').disabled = true;
 
   const toLoad = [
-    { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AI' },
+    { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AK' },
     { fileId: INFLUX_QC_SHEET.fileId, sheetName: INFLUX_QC_SHEET.sheetName, colRange: INFLUX_QC_FULL_RANGE }
   ];
   if (dashboardMode === 'live') {
@@ -550,14 +561,20 @@ function parseModuleIdsFromCell(cellValue) {
   }).filter(Boolean);
 }
 function aggregateModuleQC(systestRows, moduleRows, targetDigits) {
-  let moduleList = [];
+  const matches = [];
   for (let i = 1; i < systestRows.length; i++) {
     const raw = systestRows[i][2];
     if (!raw) continue;
     const s = String(raw).trim().replace(/\D/g, '').replace(/^0+(?=\d)/, '');
     if (s !== targetDigits) continue;
-    moduleList = parseModuleIdsFromCell(systestRows[i][3]);
-    break;
+    matches.push(systestRows[i]);
+  }
+  // Always use the most recent submission (by Timestamp, column A) - handles replacement builds
+  // where an older entry and a newer one both exist for the same Serial.
+  let moduleList = [];
+  if (matches.length > 0) {
+    matches.sort((a, b) => new Date(b[0]) - new Date(a[0]));
+    moduleList = parseModuleIdsFromCell(matches[0][3]);
   }
   if (moduleList.length === 0) return { found: false, modules: [] };
   const passedMap = {};
@@ -647,10 +664,13 @@ function switchDetailTab(tab) {
   document.getElementById('detailTabBtnPipeline').classList.toggle('active', tab === 'pipeline');
   document.getElementById('detailTabBtnCross').classList.toggle('active', tab === 'cross');
   document.getElementById('detailTabBtnSpec').classList.toggle('active', tab === 'spec');
+  document.getElementById('detailTabBtnNotes').classList.toggle('active', tab === 'notes');
   document.getElementById('detailPanelPipeline').classList.toggle('show', tab === 'pipeline');
   document.getElementById('detailPanelCross').classList.toggle('show', tab === 'cross');
   document.getElementById('detailPanelSpec').classList.toggle('show', tab === 'spec');
+  document.getElementById('detailPanelNotes').classList.toggle('show', tab === 'notes');
   if (tab === 'cross' && currentSerial) ensureInfluxQcPanelInit();
+  if (tab === 'notes' && currentSerial) ensureSystemNotesPanelInit();
 }
 
 // ─── SPEC PANEL (Master Registry lookup) ────────────────────────────────────
@@ -1176,6 +1196,61 @@ async function ensureInfluxQcPanelInit() {
   renderInfluxQcPanel();
 }
 
+// ─── SYSTEM NOTES TAB ────────────────────────────────────────────────────────
+function ensureSystemNotesPanelInit() {
+  const commentsPanel = document.getElementById('systestCommentsPanel');
+  const notesPanel = document.getElementById('userNotesPanel');
+  commentsPanel.classList.add('show'); notesPanel.classList.add('show');
+
+  const target = normalizeTarget(currentSerial);
+  const registryRow = getRegistryRow(target);
+
+  // System Testing's General Comments now come straight from the Registry (synced by the script) -
+  // no separate fetch of the full System Testing QC form needed, keeping Synced mode at 2 sheets.
+  const comment = registryRow ? registryRow[REG_COMMENTS_COL] : '';
+  commentsPanel.innerHTML = comment && String(comment).trim()
+    ? `<div style="white-space:pre-wrap; font-size:13.5px; line-height:1.6;">${comment}</div>`
+    : `<div class="spec-empty">No comments synced yet for this Serial - run the QC Sync Apps Script, or none were entered on the form.</div>`;
+
+
+  const existingNotes = registryRow ? (registryRow[REG_NOTES_COL] || '') : '';
+  notesPanel.innerHTML = `
+    <textarea id="userNotesInput" rows="6" style="width:100%; background:var(--panel-raised); border:1px solid var(--border-strong); border-radius:6px; padding:10px 12px; color:var(--text); font-family:'Inter',sans-serif; font-size:13.5px; resize:vertical;" placeholder="Add your own notes for this unit...">${existingNotes}</textarea>
+    <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+      <button class="refresh-btn" onclick="saveUserNotes('${target}')">💾 Save Notes</button>
+      <span id="userNotesStatus" style="font-size:12px; color:var(--text-dim);"></span>
+    </div>`;
+}
+
+async function saveUserNotes(target) {
+  if (!accessToken) return;
+  const text = document.getElementById('userNotesInput').value;
+  const status = document.getElementById('userNotesStatus');
+  status.textContent = 'Saving...';
+  try {
+    const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
+    const rows = sheetCache[key];
+    let rowIdx = -1;
+    if (rows) { for (let i = 1; i < rows.length; i++) { if (normalizeTarget(rows[i][0] || '') === target) { rowIdx = i; break; } } }
+    if (rowIdx === -1) throw new Error('No Registry entry for this Serial.');
+
+    const colL = colLetter(REG_NOTES_COL);
+    const range = encodeURIComponent(`${REGISTRY.sheetName}!${colL}${rowIdx + 1}`);
+    const resp = await fetch(`${SHEETS_API}/${REGISTRY.fileId}/values/${range}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[text]] })
+    });
+    if (!resp.ok) { const err = await resp.text(); throw new Error(`${resp.status}: ${err.slice(0,150)}`); }
+    rows[rowIdx][REG_NOTES_COL] = text;
+    status.textContent = 'Saved at ' + new Date().toLocaleTimeString();
+    status.style.color = 'var(--success)';
+  } catch (e) {
+    status.textContent = 'Failed to save: ' + e.message;
+    status.style.color = 'var(--danger)';
+  }
+}
+
 function renderInfluxQcPanel() {
   const panel = document.getElementById('influxQcPanel');
   panel.classList.add('show');
@@ -1250,6 +1325,71 @@ function parseInfluxCsv(text) {
   }
   if (Object.keys(fieldTimeValue).length === 0) throw new Error('No data rows found under the header.');
   return { fieldTimeValue, dataStart, dataEnd };
+}
+
+// Isolates just the target Serial's own contiguous session within a parsed dataset that may span
+// multiple units (e.g. a Cloudlink modem reused across several batteries). Previously this dashboard
+// had NO per-target isolation at all - every check silently used whatever unit's data happened to be
+// last in the uploaded file. Ported from the Apps Script's filterParsedToSerial_, same logic: find the
+// largest contiguous block of "serial" readings matching target (breaking on any gap over 30 min),
+// and keep only that block across every field.
+function filterParsedToSerial(parsed, target) {
+  if (!parsed.fieldTimeValue.serial) return parsed; // no serial field - single-unit file (e.g. a direct SYS<serial> export), nothing to isolate
+  const GAP_LIMIT_MS = 30 * 60 * 1000;
+  const serialEntries = Object.keys(parsed.fieldTimeValue.serial)
+    .map(t => ({ t, ms: new Date(t).getTime(), val: String(Math.round(parsed.fieldTimeValue.serial[t])) }))
+    .filter(e => !isNaN(e.ms))
+    .sort((a, b) => a.ms - b.ms);
+
+  const runs = [];
+  let current = null;
+  serialEntries.forEach(e => {
+    if (current && current.val === e.val && (e.ms - current.lastMs) <= GAP_LIMIT_MS) {
+      current.times.push(e.t);
+      current.lastMs = e.ms;
+    } else {
+      current = { val: e.val, times: [e.t], lastMs: e.ms };
+      runs.push(current);
+    }
+  });
+
+  const targetRuns = runs.filter(r => r.val === target);
+  if (targetRuns.length === 0) return null; // this file never reports our target at all
+  targetRuns.sort((a, b) => b.times.length - a.times.length);
+  const validTimes = {};
+  targetRuns[0].times.forEach(t => { validTimes[t] = true; });
+
+  const filtered = {};
+  Object.keys(parsed.fieldTimeValue).forEach(field => {
+    const timeMap = parsed.fieldTimeValue[field];
+    const keptTimes = Object.keys(timeMap).filter(t => validTimes[t]);
+    if (keptTimes.length === 0) return;
+    filtered[field] = {};
+    keptTimes.forEach(t => { filtered[field][t] = timeMap[t]; });
+  });
+  return { fieldTimeValue: filtered, dataStart: parsed.dataStart, dataEnd: parsed.dataEnd };
+}
+
+// 15-minute-buffered window specifically for module position extraction - trims 15 min off the start
+// (after target first appears) and 15 min off the end (before a different serial appears next), to
+// exclude stale/uncleared module-position readings lingering right at a handoff boundary. Only module
+// fields use this narrower window - every other check uses the full isolated session, untouched.
+function computeModuleBufferWindow(parsed, target) {
+  if (!parsed.fieldTimeValue.serial) return null;
+  const entries = Object.keys(parsed.fieldTimeValue.serial)
+    .map(t => ({ t, ms: new Date(t).getTime(), val: String(Math.round(parsed.fieldTimeValue.serial[t])) }))
+    .filter(e => !isNaN(e.ms))
+    .sort((a, b) => a.ms - b.ms);
+  const targetEntries = entries.filter(e => e.val === target);
+  if (targetEntries.length === 0) return null;
+
+  const firstMs = targetEntries[0].ms;
+  const lastMs = targetEntries[targetEntries.length - 1].ms;
+  const BUFFER_MS = 15 * 60 * 1000;
+  const startMs = firstMs + BUFFER_MS;
+  const nextDifferent = entries.filter(e => e.ms > lastMs && e.val !== target);
+  const endMs = nextDifferent.length > 0 ? (nextDifferent[0].ms - BUFFER_MS) : lastMs;
+  return { startMs, endMs: Math.max(endMs, startMs) };
 }
 
 // Runs the finalized QC logic (Block A / B / C) against parsed Influx data + this unit's Framp spec.
@@ -1390,14 +1530,18 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
 }
 
 async function computeModuleCrossCheck(parsed, target) {
+  const windowRange = computeModuleBufferWindow(parsed, target);
   const influxModules = {};
   Object.keys(parsed.fieldTimeValue).forEach(field => {
     const m = field.match(/^m(\d+)_serial$/i);
     if (!m) return;
     const pos = String(parseInt(m[1], 10));
-    const times = Object.keys(parsed.fieldTimeValue[field]).sort();
-    const lastT = times[times.length - 1];
-    influxModules[pos] = parsed.fieldTimeValue[field][lastT];
+    const timeMap = parsed.fieldTimeValue[field];
+    let times = Object.keys(timeMap);
+    if (windowRange) times = times.filter(t => { const ms = new Date(t).getTime(); return ms >= windowRange.startMs && ms <= windowRange.endMs; });
+    if (times.length === 0) return;
+    times.sort();
+    influxModules[pos] = timeMap[times[times.length - 1]];
   });
 
   const moduleStage = STAGES.find(s => s.id === 'module');
@@ -1503,10 +1647,16 @@ async function runInfluxQcClick() {
   const btn = document.getElementById('iqRunBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Running...'; }
   try {
-    iqComputed = runInfluxQc(iqParsedData, registryRow, cellDeltaThresh, modDeltaThresh);
+    // Isolate just this Serial's own session first - previously runInfluxQc/computeModuleCrossCheck
+    // used the raw uploaded data directly, so an upload covering multiple units (e.g. a reused
+    // Cloudlink modem) would silently check whichever unit's data happened to sort last.
+    const target = normalizeTarget(currentSerial);
+    const isolated = filterParsedToSerial(iqParsedData, target);
+    if (!isolated) throw new Error(`This CSV doesn't contain any data for Serial ${currentSerial} - check you uploaded the right file.`);
+    iqComputed = runInfluxQc(isolated, registryRow, cellDeltaThresh, modDeltaThresh);
     iqOverrides = {};
     iqModuleOverrides = {};
-    iqModuleCheck = await computeModuleCrossCheck(iqParsedData, currentSerial);
+    iqModuleCheck = await computeModuleCrossCheck(isolated, currentSerial);
     renderInfluxQcResults();
   } catch (err) {
     document.getElementById('iqResultsArea').innerHTML = `<div class="spec-empty" style="color:var(--danger);">${err.message}</div>`;
