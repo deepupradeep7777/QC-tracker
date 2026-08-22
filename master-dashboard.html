@@ -1530,20 +1530,6 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
 }
 
 async function computeModuleCrossCheck(parsed, target) {
-  const windowRange = computeModuleBufferWindow(parsed, target);
-  const influxModules = {};
-  Object.keys(parsed.fieldTimeValue).forEach(field => {
-    const m = field.match(/^m(\d+)_serial$/i);
-    if (!m) return;
-    const pos = String(parseInt(m[1], 10));
-    const timeMap = parsed.fieldTimeValue[field];
-    let times = Object.keys(timeMap);
-    if (windowRange) times = times.filter(t => { const ms = new Date(t).getTime(); return ms >= windowRange.startMs && ms <= windowRange.endMs; });
-    if (times.length === 0) return;
-    times.sort();
-    influxModules[pos] = timeMap[times[times.length - 1]];
-  });
-
   const moduleStage = STAGES.find(s => s.id === 'module');
   const moduleKey = moduleStage.fileId + '::' + (moduleStage.sheetName || 'Sheet1');
   const systestKey = moduleStage.systestFileId + '::' + (moduleStage.systestSheetName || 'Sheet1');
@@ -1555,6 +1541,25 @@ async function computeModuleCrossCheck(parsed, target) {
   const { found, modules } = aggregateModuleQC(systestRows, moduleRows, target);
   const systestMap = {};
   modules.forEach(m => { systestMap[String(m.position)] = m; });
+
+  // Only trust an Influx position if the unit is actually supposed to have it (per System Testing) -
+  // a modem shared across units with different module counts can permanently echo a stale value on
+  // a position slot the current unit was never wired to. Falls back to unfiltered if no ST data yet.
+  const expectedPositions = Object.keys(systestMap).length > 0 ? systestMap : null;
+  const windowRange = computeModuleBufferWindow(parsed, target);
+  const influxModules = {};
+  Object.keys(parsed.fieldTimeValue).forEach(field => {
+    const m = field.match(/^m(\d+)_serial$/i);
+    if (!m) return;
+    const pos = String(parseInt(m[1], 10));
+    if (expectedPositions && !expectedPositions[pos]) return;
+    const timeMap = parsed.fieldTimeValue[field];
+    let times = Object.keys(timeMap);
+    if (windowRange) times = times.filter(t => { const ms = new Date(t).getTime(); return ms >= windowRange.startMs && ms <= windowRange.endMs; });
+    if (times.length === 0) return;
+    times.sort();
+    influxModules[pos] = timeMap[times[times.length - 1]];
+  });
 
   const allPositions = [...new Set([...Object.keys(influxModules), ...Object.keys(systestMap)])].sort((a, b) => parseInt(a) - parseInt(b));
   const rows = allPositions.map(pos => {
