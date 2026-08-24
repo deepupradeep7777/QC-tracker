@@ -380,7 +380,7 @@ const SYSTEST_QC_COLS = {
 // Row 5 = headers, row 6+ = one row per QC run (appended).
 const INFLUX_QC_SHEET = { fileId: REGISTRY.fileId, sheetName: 'SysTest Influx QC' };
 const INFLUX_QC_DEFAULTS_RANGE = 'A1:B3';
-const INFLUX_QC_FULL_RANGE = 'A1:AZ'; // thresholds (rows 1-3) + header (row 5) + every saved run row, all loaded together so past results persist across visits
+const INFLUX_QC_FULL_RANGE = 'A1:BX'; // thresholds (rows 1-3) + header (row 5) + every saved run row, all loaded together so past results persist across visits
 const INFLUX_QC_COLS = [
   'Serial','Run Timestamp','Data Start (from CSV)','Data End (from CSV)',
   'Any_Fault Value','Any_Fault Result','Any_Fault Override',
@@ -1074,12 +1074,18 @@ const LAST_RUN_CHECK_MAP = [
   { label: 'CAN=Max', valueIdx: 38, resultIdx: 39, overrideIdx: 40 },
   { label: 'Main Current Duration', valueIdx: 41, thresholdIdx: 42, resultIdx: 43, overrideIdx: 44 },
   { label: 'Module Count', valueIdx: 45, resultIdx: 46, overrideIdx: 47 },
-  { label: 'Module Position', valueIdx: 48, resultIdx: 49, overrideIdx: 50 }
+  { label: 'Module Position', valueIdx: 48, resultIdx: 49, overrideIdx: 50 },
+  { label: 'Cell_SOH', expectedIdx: 52, valueIdx: 53, resultIdx: 54, overrideIdx: 55 },
+  { label: 'CV_Setting', expectedIdx: 56, valueIdx: 57, resultIdx: 58, overrideIdx: 59 },
+  { label: 'CV_Point', expectedIdx: 60, valueIdx: 61, resultIdx: 62, overrideIdx: 63 },
+  { label: 'Heater_Config', expectedIdx: 64, valueIdx: 65, resultIdx: 66, overrideIdx: 67 },
+  { label: 'UL_Config', expectedIdx: 68, valueIdx: 69, resultIdx: 70, overrideIdx: 71 },
+  { label: 'Is_HYG', expectedIdx: 72, valueIdx: 73, resultIdx: 74, overrideIdx: 75 }
 ];
 
 async function fetchLastInfluxQcRun(target) {
   try {
-    const rows = await fetchSheetRows(INFLUX_QC_SHEET.fileId, INFLUX_QC_SHEET.sheetName, 'A6:AZ');
+    const rows = await fetchSheetRows(INFLUX_QC_SHEET.fileId, INFLUX_QC_SHEET.sheetName, 'A6:BX');
     if (!rows || rows.length === 0) return null;
     // Row 6 in the sheet = array index 0 here, so sheet row number = 6 + array index - needed to write overrides back.
     const matches = rows.map((r, i) => ({ row: r, rowNum: 6 + i })).filter(m => normalizeTarget(m.row[0] || '') === target);
@@ -1526,6 +1532,57 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
     pass: baud === IQ_STANDARD_BAUD,
     detail: baud === null ? 'Not found in CSV' : `Actual: ${baud}` });
 
+  // ── Cell_SOH, CV_Setting, CV_Point (Charger_CV), Heater_Config, UL_Config, Is_HYG ──
+  // All validated against real data (SYS10394) before building.
+  const cellSohInflux = getFieldLastValue('Cell_SOH');
+  const cellSohExpected = parseFloat(regField(registryRow, 'Cell SOH'));
+  checks.push({ key: 'cellSoh', label: 'Cell_SOH', block: 'D — Configuration',
+    value: cellSohInflux, expected: isNaN(cellSohExpected) ? '— not on file' : cellSohExpected,
+    pass: !isNaN(cellSohExpected) && cellSohInflux !== null && cellSohInflux === cellSohExpected,
+    detail: cellSohInflux === null ? 'Not found in CSV' : `Actual: ${cellSohInflux}` });
+
+  const cvSettingInflux = getFieldLastValue('CV_Setting');
+  const cvSettingExpected = parseFloat(regField(registryRow, 'CV Setting'));
+  checks.push({ key: 'cvSetting', label: 'CV_Setting', block: 'D — Configuration',
+    value: cvSettingInflux, expected: isNaN(cvSettingExpected) ? '— not on file' : cvSettingExpected,
+    pass: !isNaN(cvSettingExpected) && cvSettingInflux !== null && cvSettingInflux === cvSettingExpected,
+    detail: cvSettingInflux === null ? 'Not found in CSV' : `Actual: ${cvSettingInflux}` });
+
+  // cv_point is derived, not stored directly in the Registry: 60Ah -> 3925, 50Ah -> 3990.
+  const cvPointInflux = getFieldLastValue('Charger_CV');
+  const cellCapacity = parseFloat(regField(registryRow, 'Cell Capacity (Ah)'));
+  const cvPointExpected = cellCapacity === 60 ? 3925 : cellCapacity === 50 ? 3990 : NaN;
+  checks.push({ key: 'cvPoint', label: 'CV_Point (Charger_CV)', block: 'D — Configuration',
+    value: cvPointInflux, expected: isNaN(cvPointExpected) ? '— cell capacity not on file' : cvPointExpected,
+    pass: !isNaN(cvPointExpected) && cvPointInflux !== null && cvPointInflux === cvPointExpected,
+    detail: cvPointInflux === null ? 'Not found in CSV' : `Actual: ${cvPointInflux}` });
+
+  const heaterConfigInflux = getFieldLastValue('Heater_config');
+  const heaterConfigExpected = parseFloat(regField(registryRow, 'Heater Config'));
+  checks.push({ key: 'heaterConfig', label: 'Heater_Config', block: 'D — Configuration',
+    value: heaterConfigInflux, expected: isNaN(heaterConfigExpected) ? '— not on file' : heaterConfigExpected,
+    pass: !isNaN(heaterConfigExpected) && heaterConfigInflux !== null && heaterConfigInflux === heaterConfigExpected,
+    detail: heaterConfigInflux === null ? 'Not found in CSV' : `Actual: ${heaterConfigInflux}` });
+
+  const ulConfigInflux = getFieldLastValue('UL_config');
+  const ulConfigRaw = String(regField(registryRow, 'UL Config') || '').trim();
+  const ulConfigExpected = ulConfigRaw === '' ? 0 : parseFloat(ulConfigRaw); // blank UL Config means UL=No, defaults to 0
+  checks.push({ key: 'ulConfig', label: 'UL_Config', block: 'D — Configuration',
+    value: ulConfigInflux, expected: ulConfigExpected,
+    pass: ulConfigInflux !== null && ulConfigInflux === ulConfigExpected,
+    detail: ulConfigInflux === null ? 'Not found in CSV' : `Actual: ${ulConfigInflux}` });
+
+  // Is_HYG is derived: 1 only when Forklift OEM isn't Crown/Raymond AND the Regular Code is 1 (HYG) -
+  // anything else (Motrec, GVIP, n/a, or Crown/Raymond) expects 0.
+  const isHygInflux = getFieldLastValue('Is_HYG');
+  const forkliftOemLower = String(regField(registryRow, 'Forklift OEM') || '').trim().toLowerCase();
+  const forkliftCode = String(regField(registryRow, 'Forklift/Hyg-Crown Code') || '').trim();
+  const isHygExpected = (forkliftOemLower !== 'crown' && forkliftOemLower !== 'raymond' && forkliftCode === '1') ? 1 : 0;
+  checks.push({ key: 'isHyg', label: 'Is_HYG', block: 'D — Configuration',
+    value: isHygInflux, expected: isHygExpected,
+    pass: isHygInflux !== null && isHygInflux === isHygExpected,
+    detail: isHygInflux === null ? 'Not found in CSV' : `Actual: ${isHygInflux}` });
+
   return { lastTime, lastCharge, checks, chargeRateExpected, voltageExpected };
 }
 
@@ -1783,9 +1840,11 @@ async function saveInfluxQcResult() {
   const af = resultFor('anyFault'), aw = resultFor('anyWarning'), b1 = resultFor('bms1'), b2 = resultFor('bms2');
   const cd = resultFor('cellDelta'), md = resultFor('modDelta'), cr = resultFor('chargeRate'), vt = resultFor('voltage'), bd = resultFor('baud');
   const cm = resultFor('canMaxConsistency'), dur = resultFor('mainCurrentDuration');
+  const soh = resultFor('cellSoh'), cvs = resultFor('cvSetting'), cvp = resultFor('cvPoint');
+  const hc = resultFor('heaterConfig'), ulc = resultFor('ulConfig'), hyg = resultFor('isHyg');
   const moduleSummary = summarizeModuleCrossCheck(iqModuleCheck, iqModuleOverrides);
 
-  // Overall Result now reflects every check including CAN=Max, Main Current Duration, and the
+  // Overall Result now reflects every check including the 6 new configuration checks and the
   // Module Position & Serial cross-check - a fail on any of them makes the whole run FAIL.
   const overallPass = checks.every(c => c.pass || iqOverrides[c.key])
     && moduleSummary.moduleCount.result === 'PASS' && moduleSummary.modulePosition.result === 'PASS';
@@ -1811,11 +1870,17 @@ async function saveInfluxQcResult() {
     moduleSummary.moduleCount.value, moduleSummary.moduleCount.result, iqModuleOverrides['modCount'] ? 'PASS' : '',
     moduleSummary.modulePosition.value, moduleSummary.modulePosition.result,
     (Object.keys(iqModuleOverrides).some(k => k !== 'modCount') ? 'PASS' : ''),
-    'Manual upload' // Data Source column - script writes SYS<serial>/CL#### + window, manual saves are just labeled as such
+    'Manual upload', // Data Source column - script writes SYS<serial>/CL#### + window, manual saves are just labeled as such
+    byKey.cellSoh ? byKey.cellSoh.expected : '', soh.value, soh.result, soh.override,
+    byKey.cvSetting ? byKey.cvSetting.expected : '', cvs.value, cvs.result, cvs.override,
+    byKey.cvPoint ? byKey.cvPoint.expected : '', cvp.value, cvp.result, cvp.override,
+    byKey.heaterConfig ? byKey.heaterConfig.expected : '', hc.value, hc.result, hc.override,
+    byKey.ulConfig ? byKey.ulConfig.expected : '', ulc.value, ulc.result, ulc.override,
+    byKey.isHyg ? byKey.isHyg.expected : '', hyg.value, hyg.result, hyg.override
   ];
 
   try {
-    const range = encodeURIComponent(`${INFLUX_QC_SHEET.sheetName}!A5:AZ5`);
+    const range = encodeURIComponent(`${INFLUX_QC_SHEET.sheetName}!A5:BX5`);
     const resp = await fetch(`${SHEETS_API}/${INFLUX_QC_SHEET.fileId}/values/${range}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
