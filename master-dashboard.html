@@ -132,6 +132,8 @@
   .month-table .view-link { background: transparent; border: 1px solid var(--border-strong); border-radius: 6px; color: var(--text-dim); padding: 5px 12px; font-size: 12px; cursor: pointer; }
   .month-table .view-link:hover { border-color: var(--amber); color: var(--amber); }
   .month-empty { text-align: center; padding: 30px 20px; color: var(--text-faint); font-size: 13.5px; }
+  .month-shipped-toggle { display: flex; align-items: center; gap: 4px; width: 100%; text-align: left; padding: 10px 14px; background: var(--panel-raised); border: none; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); color: var(--text-dim); cursor: pointer; font-family: 'Inter', sans-serif; font-size: 12.5px; font-weight: 600; }
+  .month-shipped-toggle:hover { color: var(--sky); }
 
   .month-workspace { display: flex; gap: 16px; align-items: flex-start; }
   .month-sidebar { flex: 0 0 240px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; max-height: 70vh; overflow-y: auto; }
@@ -233,13 +235,7 @@
       <span class="cache-dot" id="cacheDot"></span>
       <span id="cacheText">Sign in first, then load sheets.</span>
     </div>
-    <div style="display:flex; align-items:center; gap:10px;">
-      <div class="view-toggle" style="margin:0;">
-        <button class="view-btn active" id="btnModeSynced" onclick="switchDashboardMode('synced')" title="Fast — reads one sheet, updated by the background sync">⚡ Synced (1 sheet)</button>
-        <button class="view-btn" id="btnModeLive" onclick="switchDashboardMode('live')" title="Slower — checks all 7 QC sheets live, use if sync hasn't run yet">🔍 Live Check (8 sheets)</button>
-      </div>
-      <button class="refresh-btn" id="refreshBtn" onclick="loadAllSheets()" disabled>⟳ Load Sheets</button>
-    </div>
+    <button class="refresh-btn" id="refreshBtn" onclick="loadAllSheets()" disabled>⟳ Refresh</button>
   </div>
 
   <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
@@ -500,13 +496,6 @@ async function loadAllSheets() {
     { fileId: REGISTRY.fileId, sheetName: REGISTRY.sheetName, colRange: 'A1:AK' },
     { fileId: INFLUX_QC_SHEET.fileId, sheetName: INFLUX_QC_SHEET.sheetName, colRange: INFLUX_QC_FULL_RANGE }
   ];
-  if (dashboardMode === 'live') {
-    toLoad.push({ fileId: SYSTEST_QC.fileId, sheetName: SYSTEST_QC.sheetName, colRange: null });
-    for (const stage of STAGES) {
-      toLoad.push({ fileId: stage.fileId, sheetName: stage.sheetName || 'Sheet1', colRange: stage.colRange || null });
-      if (stage.systestFileId) toLoad.push({ fileId: stage.systestFileId, sheetName: stage.systestSheetName || 'Sheet1', colRange: null });
-    }
-  }
   const unique = toLoad.filter((v, i, a) => a.findIndex(x => x.fileId === v.fileId && x.sheetName === v.sheetName) === i);
 
   let loaded = 0, failed = 0;
@@ -645,7 +634,7 @@ function initStages() {
 }
 initStages();
 
-function setStageUI(id, state, statusText, note, rowText) {
+function setStageUI(id, state, statusText, note, rowText, isHtml) {
   const num = document.getElementById(`num-${id}`);
   const card = document.getElementById(`card-${id}`);
   const status = document.getElementById(`status-${id}`);
@@ -655,8 +644,11 @@ function setStageUI(id, state, statusText, note, rowText) {
   status.textContent = statusText;
   document.getElementById(`note-${id}`).textContent = note || '';
   const rowEl = document.getElementById(`row-${id}`);
-  if (rowText) { rowEl.textContent = rowText; rowEl.classList.add('show'); rowEl.style.background = ''; rowEl.style.padding = ''; }
-  else rowEl.classList.remove('show');
+  if (rowText) {
+    if (isHtml) { rowEl.innerHTML = rowText; rowEl.style.background = 'none'; rowEl.style.padding = '0'; }
+    else { rowEl.textContent = rowText; rowEl.style.background = ''; rowEl.style.padding = ''; }
+    rowEl.classList.add('show');
+  } else rowEl.classList.remove('show');
 }
 
 // ─── DETAIL TABS (Pipeline+Spec  vs  Cross-Verification + System Testing) ──
@@ -681,7 +673,7 @@ function renderSpec(target, serial) {
   panel.classList.add('show');
 
   if (!rows || rows.length < 2) {
-    panel.innerHTML = `<div class="spec-empty">Registry sheet not loaded yet — click "Load Sheets" above.</div>`;
+    panel.innerHTML = `<div class="spec-empty">Registry sheet not loaded yet — click "Refresh" above.</div>`;
     return;
   }
 
@@ -829,17 +821,6 @@ async function checkStage(stage, serial) {
 }
 
 // ─── SEARCH ──────────────────────────────────────────────────────────────────
-let dashboardMode = 'synced'; // 'synced' = read AG/AH from Registry (1 sheet); 'live' = check all 7 stage sheets directly
-
-function switchDashboardMode(mode) {
-  dashboardMode = mode;
-  document.getElementById('btnModeSynced').classList.toggle('active', mode === 'synced');
-  document.getElementById('btnModeLive').classList.toggle('active', mode === 'live');
-  cacheLoadedAt = null;
-  Object.keys(sheetCache).forEach(k => delete sheetCache[k]);
-  setCacheUI('', 'Mode changed — click Load Sheets again.');
-  document.getElementById('searchBtn').disabled = true;
-}
 
 // Maps the Apps Script sync's stage names (in the AG summary text) to this page's STAGES ids/labels/tags.
 const SYNCED_STAGE_MAP = {
@@ -847,9 +828,43 @@ const SYNCED_STAGE_MAP = {
   SystemTest: 'systest', Telemetry: 'telemetry', Packaging: 'packaging'
 };
 
+// Parses Telemetry's pipe-separated section detail (e.g. "WiFi(Influx:X,Final:Y,VPN:✓)|OBT(...)")
+// back into the same colored grid HTML Live mode builds directly from raw data.
+function parseTelemetryDetailToGrid_(detail) {
+  const afterDash = detail.includes(' — ') ? detail.split(' — ')[1] : detail;
+  const sections = (afterDash || '').split('|').map(s => s.trim()).filter(Boolean);
+  const parsed = sections.map(s => {
+    const m = s.match(/^(\w+)\(Influx:([^,]*),Final:([^,]*),VPN:([✓✗])\)$/);
+    return m ? { name: m[1], influx: m[2], final: m[3], vpnDone: m[4] === '✓' } : null;
+  }).filter(Boolean);
+  if (parsed.length === 0) return null;
+  return `<div class="tel-grid">${parsed.map(d => `
+    <div class="tel-section">
+      <div class="tel-section-name">${d.name}</div>
+      <div class="tel-field"><span class="tel-field-label">Influx QC</span><span class="tel-field-value">${d.influx}</span></div>
+      <div class="tel-field"><span class="tel-field-label">Final QC</span><span class="tel-field-value">${d.final}</span></div>
+      <div class="tel-vpn"><span class="tel-vpn-dot ${d.vpnDone ? 'done' : 'pending'}"></span><span class="tel-vpn-label">VPN ${d.vpnDone ? 'Complete' : 'Pending'}</span></div>
+    </div>`).join('')}</div>`;
+}
+
+// Parses Module's pipe-separated per-module detail (e.g. "Pos1:38161✓(RAJ)|Pos2:38160✓(RAJ)")
+// back into one row per module, matching Live mode's stacked layout instead of one long sentence.
+function parseModuleDetailToRows_(detail) {
+  const afterDash = detail.includes(' — ') ? detail.split(' — ')[1] : detail;
+  const entries = (afterDash || '').split('|').map(s => s.trim()).filter(Boolean);
+  if (entries.length === 0) return null;
+  const rows = entries.map(e => {
+    const m = e.match(/^Pos(\d+):(\d+)(✓|✗)\((.*)\)$/);
+    if (!m) return `<div style="padding:2px 0;">${e}</div>`;
+    const pass = m[3] === '✓';
+    return `<div style="padding:2px 0; color:${pass ? 'var(--success)' : 'var(--danger)'};">Pos ${m[1]} - ${m[2]} - ${m[3]} ${m[4]}</div>`;
+  }).join('');
+  return `<div style="font-family:'JetBrains Mono',monospace; font-size:12px;">${rows}</div>`;
+}
+
 function renderSyncedStages(summaryText, syncedAt) {
   if (!summaryText) {
-    STAGES.forEach(s => setStageUI(s.id, 'inactive', 'Not synced yet', 'Run the QC Sync Apps Script, or switch to Live Check.', null));
+    STAGES.forEach(s => setStageUI(s.id, 'inactive', 'Not synced yet', 'Run the QC Sync Apps Script.', null));
     return;
   }
   const lines = summaryText.split('\n');
@@ -861,6 +876,15 @@ function renderSyncedStages(summaryText, syncedAt) {
     const status = m[2], detail = m[3];
     const state = status === 'PASS' ? 'pass' : 'fail';
     const statusText = status === 'MISSING' ? 'Missing' : status === 'PASS' ? 'Submitted' : 'Issue';
+
+    if (stageId === 'telemetry') {
+      const grid = parseTelemetryDetailToGrid_(detail);
+      if (grid) { setStageUI(stageId, state, statusText, '', grid, true); return; }
+    }
+    if (stageId === 'module') {
+      const rows = parseModuleDetailToRows_(detail);
+      if (rows) { setStageUI(stageId, state, statusText, '', rows, true); return; }
+    }
     setStageUI(stageId, state, statusText, '', detail);
   });
   const overallMatch = summaryText.match(/Overall:\s*(\S+.*)$/m);
@@ -904,7 +928,7 @@ function renderCrossCheckSynced_(registryRow) {
 
   const ccLine = summary.split('\n').find(l => l.startsWith('CrossCheck:'));
   if (!ccLine) {
-    panel.innerHTML = `<div class="spec-empty">No Cross-Check data synced yet for this Serial. Run the QC Sync Apps Script, or switch to Live Check.</div>`;
+    panel.innerHTML = `<div class="spec-empty">No Cross-Check data synced yet for this Serial. Run the QC Sync Apps Script.</div>`;
     return;
   }
   const m = ccLine.match(/^CrossCheck:\s*(PASS|FAIL|MISSING)\s*\((.*)\)$/);
@@ -942,7 +966,7 @@ function renderCrossCheckSynced_(registryRow) {
   if (mismatchCount === 0) {
     html = dupeNoteHtml + `<div class="spec-empty" style="color:var(--success);">✓ All ${matchCount} checks passed — no mismatches found.</div>` + html;
   }
-  html += `<div class="cc-note" style="color:var(--text-faint);">Synced ${syncedAt ? new Date(syncedAt).toLocaleString() : 'time unknown'}. Switch to Live Check for real-time verification.</div>`;
+  html += `<div class="cc-note" style="color:var(--text-faint);">Synced ${syncedAt ? new Date(syncedAt).toLocaleString() : 'time unknown'}.</div>`;
   panel.innerHTML = html;
 }
 
@@ -955,96 +979,7 @@ function renderCrossCheck(target, registryRow) {
     return;
   }
 
-  if (dashboardMode === 'synced') { renderCrossCheckSynced_(registryRow); return; }
-
-  const key = SYSTEST_QC.fileId + '::' + SYSTEST_QC.sheetName;
-  const rows = sheetCache[key];
-  if (!rows || rows.length < 2) {
-    panel.innerHTML = `<div class="spec-empty">System Testing QC form not loaded — click "Load Sheets" above.</div>`;
-    return;
-  }
-
-  const c = SYSTEST_QC_COLS;
-  const matches = [];
-  for (let i = 1; i < rows.length; i++) {
-    const raw = rows[i][c.sysNumber];
-    if (raw === undefined || raw === null || String(raw).trim() === '') continue;
-    if (normalizeTarget(raw) !== target) continue;
-    matches.push(rows[i]);
-  }
-
-  if (matches.length === 0) {
-    panel.innerHTML = `<div class="spec-empty">No System Testing QC submission found yet for Serial ${target}.</div>`;
-    return;
-  }
-
-  matches.sort((a, b) => new Date(b[c.timestamp]) - new Date(a[c.timestamp]));
-  const latest = matches[0];
-  let duplicateNote = '';
-  if (matches.length > 1) {
-    const chargeRates = new Set(matches.map(m => String(m[c.chargeRate] || '').trim()));
-    duplicateNote = `<div class="cc-note">⚠ ${matches.length} System Testing submissions found for this Serial (using the most recent, ${new Date(latest[c.timestamp]).toLocaleDateString()}).`
-      + (chargeRates.size > 1 ? ` Conflicting Charge Rate values across submissions: ${[...chargeRates].join(', ')} — worth checking if this was a legitimate retest.` : '') + `</div>`;
-  }
-
-  const get = (colName) => regField(registryRow, colName);
-
-  const frampModules = parseInt(get('Active Modules'), 10);
-  const qcModuleCount = parseModuleCount_(latest[c.moduleList]);
-  let moduleState = 'nodata', moduleQcText = '— no module list on file';
-  if (qcModuleCount !== null) {
-    moduleQcText = qcModuleCount + ' module(s) listed';
-    if (!isNaN(frampModules)) moduleState = qcModuleCount === frampModules ? 'match' : 'mismatch';
-  }
-
-  const frampCharge = parseFloat(get('Charge Rate (A)'));
-  const qcChargeRaw = latest[c.chargeRate];
-  const qcCharge = qcChargeRaw !== undefined && qcChargeRaw !== null && qcChargeRaw !== '' ? parseFloat(qcChargeRaw) : NaN;
-  let chargeState = 'nodata', chargeQcText = '— not recorded';
-  if (!isNaN(qcCharge)) {
-    chargeQcText = qcCharge + 'A';
-    if (!isNaN(frampCharge)) chargeState = qcCharge === frampCharge ? 'match' : 'mismatch';
-  }
-
-  const actualV = get('Actual System Voltage'), packV = get('Pack Voltage');
-  const frampVoltage = actualV ? parseFloat(actualV) : (packV ? parseFloat(packV) : NaN);
-  const qcVoltRaw = latest[c.voltage];
-  const qcVoltNum = [24, 36, 48, 80].includes(Number(qcVoltRaw)) ? Number(qcVoltRaw) : NaN;
-  let voltState = 'nodata', voltQcText = '— not recorded';
-  if (!isNaN(qcVoltNum)) {
-    voltQcText = qcVoltNum + 'V';
-    if (!isNaN(frampVoltage)) {
-      const packBucket = packV ? parseFloat(packV) : frampVoltage;
-      voltState = (qcVoltNum === frampVoltage || qcVoltNum === packBucket) ? 'match' : 'mismatch';
-    }
-  }
-
-  const forkliftOem = (get('Forklift OEM') || '').toString().toLowerCase();
-  const forkliftCode = get('Forklift/Hyg-Crown Code');
-  const frampIsCrown = forkliftOem === 'crown';
-  const frampIsHyg = String(forkliftCode) === '1' && !frampIsCrown;
-  let frampHygCrownText = frampIsCrown ? 'Crown' : frampIsHyg ? 'HYG' : 'Neither';
-
-  const qcHygYes = String(latest[c.hygEnabled] || '').trim().toLowerCase() === 'yes';
-  const qcCrownVal = String(latest[c.crownSwitch] || '').trim();
-  const qcCrownFilled = qcCrownVal !== '' && !/^n\s*\/?\s*a$/i.test(qcCrownVal);
-  let qcHygCrownText = qcCrownFilled ? 'Crown' : qcHygYes ? 'HYG' : 'Neither';
-
-  const hygCrownState = frampHygCrownText === qcHygCrownText ? 'match' : 'mismatch';
-
-  const rowHtml = (label, frampVal, qcVal, state) => `
-    <div class="cc-row">
-      <div class="cc-label">${label}</div>
-      <div class="cc-val"><span class="cc-caption">Framp Spec</span>${frampVal}</div>
-      <div class="cc-val"><span class="cc-caption">System Testing QC</span>${qcVal}</div>
-      ${ccBadge(state, state === 'match' ? '✓ Match' : state === 'mismatch' ? '✗ Mismatch' : 'No data')}
-    </div>`;
-
-  panel.innerHTML = duplicateNote
-    + rowHtml('Module Count', isNaN(frampModules) ? '—' : frampModules, moduleQcText, moduleState)
-    + rowHtml('Charge Rate', isNaN(frampCharge) ? '—' : frampCharge + 'A', chargeQcText, chargeState)
-    + rowHtml('Voltage', isNaN(frampVoltage) ? '—' : frampVoltage + 'V', voltQcText, voltState)
-    + rowHtml('HYG / Crown', frampHygCrownText, qcHygCrownText, hygCrownState);
+  renderCrossCheckSynced_(registryRow);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2011,28 +1946,21 @@ async function populateDetail(serial) {
 
   iqParsedData = null; iqComputed = null; iqOverrides = {}; iqFileName = null;
 
-  if (dashboardMode === 'synced') {
-    const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
-    const rows = sheetCache[key];
-    let summary = '', syncedAt = '';
-    if (rows) {
-      const statusIdx = REGISTRY_COLS.indexOf('Target Month') + 1;
-      const syncedIdx = statusIdx + 1;
-      for (let i = 1; i < rows.length; i++) {
-        const s = normalizeTarget(rows[i][0] || '');
-        if (s !== target) continue;
-        summary = rows[i][statusIdx] || '';
-        syncedAt = rows[i][syncedIdx] || '';
-        break;
-      }
+  const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
+  const rows = sheetCache[key];
+  let summary = '', syncedAt = '';
+  if (rows) {
+    const statusIdx = REGISTRY_COLS.indexOf('Target Month') + 1;
+    const syncedIdx = statusIdx + 1;
+    for (let i = 1; i < rows.length; i++) {
+      const s = normalizeTarget(rows[i][0] || '');
+      if (s !== target) continue;
+      summary = rows[i][statusIdx] || '';
+      syncedAt = rows[i][syncedIdx] || '';
+      break;
     }
-    renderSyncedStages(summary, syncedAt);
-    return;
   }
-
-  for (let i = 0; i < STAGES.length; i += 2) {
-    await Promise.all(STAGES.slice(i, i + 2).map(s => checkStage(s, serial)));
-  }
+  renderSyncedStages(summary, syncedAt);
 }
 
 async function runSearch() {
@@ -2123,7 +2051,7 @@ function runMonthSearch() {
       if (rowMonth.toLowerCase() === targetLabel.toLowerCase()) matches.push(rows[i]);
     }
   }
-  monthMatches = matches;
+  monthMatches = matches; // kept in original order - selectMonthSerial below re-derives the sorted, split order
 
   document.getElementById('monthResultCount').textContent = `${matches.length} unit(s) — ${targetLabel}`;
   const sidebar = document.getElementById('monthSidebar');
@@ -2137,8 +2065,15 @@ function runMonthSearch() {
     return;
   }
 
+  // Split into active vs shipped, but keep monthMatches in this same active-then-shipped order so
+  // the numeric index used by selectMonthSerial always lines up with what's rendered below.
+  const isShipped = row => (row[REG_SHIP_COL] || '').toString().trim().toLowerCase() === 'shipped';
+  const active = matches.filter(row => !isShipped(row));
+  const shipped = matches.filter(isShipped);
+  monthMatches = active.concat(shipped);
+
   const get = (row, colName) => { const idx = REGISTRY_COLS.indexOf(colName); return row[idx] || ''; };
-  sidebar.innerHTML = matches.map((row, i) => {
+  const renderItem = (row, i) => {
     const serial = get(row, 'Serial');
     const client = get(row, 'Client');
     const dot = statusDotClass(row);
@@ -2146,7 +2081,28 @@ function runMonthSearch() {
       <div class="msi-serial"><span class="msi-status-dot ${dot}"></span>${serial}</div>
       <div class="msi-client">${client || '—'}</div>
     </button>`;
-  }).join('');
+  };
+
+  let html = active.map((row, i) => renderItem(row, i)).join('');
+  if (shipped.length > 0) {
+    html += `
+      <button class="month-shipped-toggle" onclick="toggleShippedSection()">
+        <span id="shippedChevron">▶</span>&nbsp;📦 Shipped (${shipped.length})
+      </button>
+      <div id="shippedSection" style="display:none;">
+        ${shipped.map((row, i) => renderItem(row, active.length + i)).join('')}
+      </div>`;
+  }
+  sidebar.innerHTML = html;
+}
+
+function toggleShippedSection() {
+  const section = document.getElementById('shippedSection');
+  const chevron = document.getElementById('shippedChevron');
+  if (!section) return;
+  const isOpen = section.style.display === 'block';
+  section.style.display = isOpen ? 'none' : 'block';
+  if (chevron) chevron.textContent = isOpen ? '▶' : '▼';
 }
 
 async function selectMonthSerial(idx) {
@@ -2177,17 +2133,17 @@ function runShippingList() {
 
   document.getElementById('shippingResultsWrap').style.display = 'block';
 
+  // Ready only - Shipped units live exclusively in Monthly Target's collapsible "Shipped" section now.
   const matches = [];
   if (rows && rows.length > 1) {
     for (let i = 1; i < rows.length; i++) {
       const val = (rows[i][REG_SHIP_COL] || '').toString().trim().toLowerCase();
-      if (val === 'ready' || val === 'shipped' || val === 'yes') matches.push(rows[i]); // "yes" = legacy value
+      if (val === 'ready' || val === 'yes') matches.push(rows[i]); // "yes" = legacy value
     }
   }
   shippingMatches = matches;
 
-  const shippedCount = matches.filter(r => (r[REG_SHIP_COL] || '').toString().trim().toLowerCase() === 'shipped').length;
-  document.getElementById('shippingResultCount').textContent = `${matches.length} unit(s) — ${shippedCount} shipped, ${matches.length - shippedCount} ready`;
+  document.getElementById('shippingResultCount').textContent = `${matches.length} unit(s) ready`;
   const sidebar = document.getElementById('shippingSidebar');
 
   const resultsEl = document.getElementById('resultsWrap');
@@ -2195,7 +2151,7 @@ function runShippingList() {
   document.getElementById('shippingDetailEmpty').style.display = 'block';
 
   if (matches.length === 0) {
-    sidebar.innerHTML = `<div class="month-empty">No units marked Ready or Shipped yet.<br>Use the Shipping controls on a unit's Pipeline tab to add it here.</div>`;
+    sidebar.innerHTML = `<div class="month-empty">No units marked Ready yet.<br>Use the Shipping controls on a unit's Pipeline tab to add it here.</div>`;
     return;
   }
 
@@ -2203,10 +2159,9 @@ function runShippingList() {
   sidebar.innerHTML = matches.map((row, i) => {
     const serial = get(row, 'Serial');
     const client = get(row, 'Client');
-    const isShipped = (row[REG_SHIP_COL] || '').toString().trim().toLowerCase() === 'shipped';
     return `<button class="month-sidebar-item" id="ssi-${i}" onclick="selectShippingSerial(${i})">
-      <div class="msi-serial"><span class="msi-status-dot ${isShipped ? 'blue' : 'green'}"></span>${serial}</div>
-      <div class="msi-client">${client || '—'} ${isShipped ? '· Shipped' : '· Ready'}</div>
+      <div class="msi-serial"><span class="msi-status-dot green"></span>${serial}</div>
+      <div class="msi-client">${client || '—'}</div>
     </button>`;
   }).join('');
 }
