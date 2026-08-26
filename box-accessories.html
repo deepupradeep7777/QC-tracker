@@ -381,7 +381,12 @@ function buildPackingList(fields){
     const textSaysPreinstalled = has(chargeJ,'pre install') || has(chargeJ,'pre-install') || has(chargeJ,'preinstalled');
     const fixed = textSaysPreinstalled || isLugFixedDesign;
     if(!fixed){
-      const note = has(chargeJ,'rosspar') ? '1x Euro Housing kit' : 'Included in the box';
+      let note = 'Included in the box';
+      if(has(chargeJ,'rosspar')){
+        const qtyMatch = chargeJ.match(/(\d+)\s*x/i);
+        const qty = qtyMatch ? qtyMatch[1] : '1';
+        note = qty + 'x Euro Housing kit';
+      }
       add('Jumpers', 'Charge Jumper: ' + chargeJ, note);
     }
   }
