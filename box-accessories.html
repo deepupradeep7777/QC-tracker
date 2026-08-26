@@ -166,10 +166,8 @@ UL: No"></textarea>
 
 <script>
 /* ============================= storage helpers ============================= */
-/* Uses localStorage, not window.storage — window.storage only exists inside Claude.ai's own artifact
-   preview and does not exist on a real deployed page, so it would silently fail here. */
-function storeGet(key){ try{ return localStorage.getItem(key); }catch(e){ return null; } }
-function storeSet(key,val){ try{ localStorage.setItem(key, val); }catch(e){ console.error('storage set failed',e); } }
+async function storeGet(key){ try{ const r = await window.storage.get(key,false); return r? r.value : null; }catch(e){ return null; } }
+async function storeSet(key,val){ try{ await window.storage.set(key, val, false); }catch(e){ console.error('storage set failed',e); } }
 
 /* ============================= Google Sheets lookup (OAuth) ============================= */
 /* Shared OAuth client — same one used by the Framp Generator / Master Dashboard / Monthly Target tools. */
@@ -208,15 +206,11 @@ function setSheetsStatus(text, cls){
   el.className = 'sheets-status' + (cls? ' '+cls : '');
 }
 
-function normalizeSysNum(v){
-  return (v||'').toString().trim().replace(/^sys[\s-]*/i, '');
-}
-
 function rowsToLookup(rows, sysnumCol, serialCol){
   const map = {};
   if(!rows) return map;
-  rows.slice(1).forEach(row=>{ // skip header row
-    const sysnum = normalizeSysNum(row[sysnumCol]);
+  rows.forEach(row=>{
+    const sysnum = (row[sysnumCol]||'').toString().trim();
     const serial = (row[serialCol]||'').toString().trim();
     if(sysnum) map[sysnum] = serial;
   });
@@ -387,7 +381,8 @@ function buildPackingList(fields){
     const textSaysPreinstalled = has(chargeJ,'pre install') || has(chargeJ,'pre-install') || has(chargeJ,'preinstalled');
     const fixed = textSaysPreinstalled || isLugFixedDesign;
     if(!fixed){
-      add('Jumpers', 'Charge Jumper: ' + chargeJ, 'Included in the box');
+      const note = has(chargeJ,'rosspar') ? '1x Euro Housing kit' : 'Included in the box';
+      add('Jumpers', 'Charge Jumper: ' + chargeJ, note);
     }
   }
 
