@@ -196,12 +196,20 @@
   .live-soc-check-name { font-size: 12.5px; color: var(--text-dim); }
   .live-soc-check-badge { font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 5px; }
 
-  @keyframes liveSocCharge { 0% { opacity: .85 } 50% { opacity: 1 } 100% { opacity: .85 } }
+  .live-soc-battery-fill { position: relative; overflow: hidden; }
+  .live-soc-battery-fill::after { content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 60%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.38), transparent); transform: translateX(-120%); opacity: 0; pointer-events: none; }
+  @keyframes liveSocSweepR { 0% { transform: translateX(-120%) } 100% { transform: translateX(260%) } }
+  @keyframes liveSocSweepL { 0% { transform: translateX(260%) } 100% { transform: translateX(-120%) } }
+  @keyframes liveSocBreathe { 0%, 100% { filter: brightness(.9) } 50% { filter: brightness(1.2) } }
   @keyframes liveSocFault { 0%, 100% { opacity: 1 } 50% { opacity: .25 } }
-  @keyframes liveSocIdle { 0% { opacity: .55 } 50% { opacity: .4 } 100% { opacity: .55 } }
-  .live-soc-fill-charge { animation: liveSocCharge 1.6s ease-in-out infinite; }
+  @keyframes liveSocBolt { 0%, 100% { transform: scale(1); opacity: 1 } 50% { transform: scale(1.25); opacity: .7 } }
+  .live-soc-fill-charge::after { opacity: 1; animation: liveSocSweepR 1.6s linear infinite; }
+  .live-soc-fill-discharge::after { opacity: 1; animation: liveSocSweepL 2.4s linear infinite; }
+  .live-soc-fill-idle { animation: liveSocBreathe 3.2s ease-in-out infinite; }
+  .live-soc-fill-idle::after { opacity: 1; animation: liveSocSweepR 4.5s ease-in-out infinite; }
   .live-soc-fill-fault { animation: liveSocFault .9s step-start infinite; }
-  .live-soc-fill-idle { animation: liveSocIdle 3s ease-in-out infinite; }
+  .live-soc-bolt svg, svg.live-soc-bolt { animation: liveSocBolt 1.2s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) { .live-soc-battery-fill, .live-soc-battery-fill::after, .live-soc-bolt { animation: none !important; } }
 
   /* ── System Testing Influx QC panel ── */
   .upload-box { border: 2px dashed var(--border-strong); border-radius: 10px; padding: 26px 20px; text-align: center; color: var(--text-dim); font-size: 13.5px; cursor: pointer; margin-bottom: 18px; transition: border-color .2s, color .2s; }
@@ -2109,8 +2117,8 @@ function liveSocStateFromSample_(sample) {
     return { key: 'fault', label: 'FAULT', color: 'var(--danger)', chipBg: 'rgba(229,72,77,.14)', fillClass: 'live-soc-fill-fault', fillColor: 'var(--danger)', bolt: false, warn: true };
   }
   if (stateVal === 1) return { key: 'charging', label: 'CHARGING', color: 'var(--pipeline-pass)', chipBg: 'rgba(45,212,191,.14)', fillClass: 'live-soc-fill-charge', fillColor: 'var(--pipeline-pass)', bolt: true, warn: false };
-  if (stateVal === 2) return { key: 'discharging', label: 'DISCHARGING', color: 'var(--amber)', chipBg: 'rgba(242,169,0,.14)', fillClass: '', fillColor: 'var(--amber)', bolt: false, warn: false };
-  return { key: 'idle', label: 'IDLE', color: 'var(--text-dim)', chipBg: 'rgba(107,118,132,.14)', fillClass: '', fillColor: 'var(--pipeline-pass)', bolt: false, warn: false };
+  if (stateVal === 2) return { key: 'discharging', label: 'DISCHARGING', color: 'var(--amber)', chipBg: 'rgba(242,169,0,.14)', fillClass: 'live-soc-fill-discharge', fillColor: 'var(--amber)', bolt: false, warn: false };
+  return { key: 'idle', label: 'IDLE', color: 'var(--text-dim)', chipBg: 'rgba(107,118,132,.14)', fillClass: 'live-soc-fill-idle', fillColor: 'var(--pipeline-pass)', bolt: false, warn: false };
 }
 
 // Same 6 "D — Configuration" checks as runInfluxQc (Cell_SOH, CV_Setting, CV_Point, Heater_Config,
@@ -2217,7 +2225,7 @@ function renderLiveSoc_(target, sample, source, opts) {
     <div class="live-soc-battery">
       <div class="live-soc-battery-body">
         <div class="live-soc-battery-inner">
-          <div class="live-soc-battery-fill ${st.fillClass}" style="width:${socPct === null ? 0 : socPct}%; background:${st.fillColor};"></div>
+          <div class="live-soc-battery-fill ${st.fillClass}" data-w="${socPct === null ? 0 : socPct}" style="width:0%; background:${st.fillColor};"></div>
         </div>
       </div>
       <div class="live-soc-battery-nub"></div>
@@ -2231,6 +2239,8 @@ function renderLiveSoc_(target, sample, source, opts) {
     </div>
     <div class="live-soc-meta">src ${source}${opts.savedAt ? ' · saved ' + new Date(opts.savedAt).toLocaleString() : (mostRecentTime ? ' · as of ' + secondsAgoLabel_(mostRecentTime) : '')}</div>
     <div class="live-soc-meta-sub">${opts.sub || 'from uploaded Influx QC CSV — not a live feed'}</div>`;
+  const fillEl = document.querySelector('#liveSocBody .live-soc-battery-fill');
+  if (fillEl) { void fillEl.offsetWidth; requestAnimationFrame(() => { fillEl.style.width = fillEl.getAttribute('data-w') + '%'; }); }
 }
 
 function stopLiveSoc() {
