@@ -379,16 +379,16 @@
     <div class="live-soc-col">
       <div class="live-soc-card" id="liveSocCard">
         <div class="live-soc-head">
-          <div class="live-soc-title" id="liveSocTitle">Live SOC</div>
+          <div class="live-soc-title" id="liveSocTitle">SOC</div>
           <div class="live-soc-chip" id="liveSocChip"><span class="live-soc-dot" id="liveSocDot"></span><span id="liveSocStateLabel">—</span></div>
         </div>
         <div id="liveSocBody" style="width:100%; display:flex; flex-direction:column; align-items:center; gap:12px;">
-          <div class="live-soc-msg">Open a serial, then upload its System Testing Influx QC CSV to see SOC.</div>
+          <div class="live-soc-msg">Open a serial to see its SOC and battery data.</div>
         </div>
       </div>
 
       <div class="live-soc-card" style="align-items:stretch;">
-        <div class="live-soc-title">Config cross-checks <span style="font-size:9px; padding:2px 7px; border-radius:4px; border:1px solid var(--border-strong); color:var(--text-faint); font-weight:400; margin-left:4px;">same checks as Influx QC</span></div>
+        <div class="live-soc-title">Battery Data</div>
         <div class="live-soc-checks" id="liveSocChecks">
           <div class="live-soc-msg">—</div>
         </div>
@@ -447,7 +447,7 @@ const SYSTEST_QC_COLS = {
 // Row 5 = headers, row 6+ = one row per QC run (appended).
 const INFLUX_QC_SHEET = { fileId: REGISTRY.fileId, sheetName: 'SysTest Influx QC' };
 const INFLUX_QC_DEFAULTS_RANGE = 'A1:B3';
-const INFLUX_QC_FULL_RANGE = 'A1:BX'; // thresholds (rows 1-3) + header (row 5) + every saved run row, all loaded together so past results persist across visits
+const INFLUX_QC_FULL_RANGE = 'A1:BY'; // thresholds (rows 1-3) + header (row 5) + every saved run row, all loaded together so past results persist across visits
 const INFLUX_QC_COLS = [
   'Serial','Run Timestamp','Data Start (from CSV)','Data End (from CSV)',
   'Any_Fault Value','Any_Fault Result','Any_Fault Override',
@@ -1091,7 +1091,7 @@ const LAST_RUN_CHECK_MAP = [
 
 async function fetchLastInfluxQcRun(target) {
   try {
-    const rows = await fetchSheetRows(INFLUX_QC_SHEET.fileId, INFLUX_QC_SHEET.sheetName, 'A6:BX');
+    const rows = await fetchSheetRows(INFLUX_QC_SHEET.fileId, INFLUX_QC_SHEET.sheetName, 'A6:BY');
     if (!rows || rows.length === 0) return null;
     // Row 6 in the sheet = array index 0 here, so sheet row number = 6 + array index - needed to write overrides back.
     const matches = rows.map((r, i) => ({ row: r, rowNum: 6 + i })).filter(m => normalizeTarget(m.row[0] || '') === target);
@@ -1323,7 +1323,7 @@ async function refreshInfluxQcClick() {
   iqRefreshing = true;
   const btn = document.getElementById('iqRefreshBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Pulling…'; }
-  setIqRefreshMsg_('Running the Influx pull — this can take up to a minute…', '');
+  setIqRefreshMsg_('Pulling every pending unit — this can take several minutes, keep this tab open…', '');
   try {
     // text/plain keeps this a "simple" request so the browser doesn't need a CORS preflight (Apps Script can't answer one).
     const resp = await fetch(REFRESH_ENDPOINT, { method: 'POST', body: JSON.stringify({ action: 'refreshInflux', key: REFRESH_KEY, serial: serial || '' }) });
@@ -1335,13 +1335,15 @@ async function refreshInfluxQcClick() {
       iqLastRun = await fetchLastInfluxQcRun(serial);
       const box = document.getElementById('iqLastRunBox');
       if (box) box.outerHTML = renderLastRunSummary();
+      if (!iqParsedData) loadLiveSocFromSaved_(serial, iqLastRun); // keep the SOC panel in step with the refreshed row
     }
     const parts = [];
     if (data.added) parts.push(data.added + ' new result' + (data.added === 1 ? '' : 's') + ' saved');
     if (data.backfilled) parts.push(data.backfilled + ' updated');
+    if (data.timedOut) parts.push('stopped at the time limit — click again to continue with the rest');
     const msg = data.skipped ? ('Nothing pulled — ' + data.skipped + '.')
-      : parts.length ? ('Done — ' + parts.join(', ') + '.')
-      : 'Done — no new units with System Testing data to pull (saved results are never overwritten).';
+      : parts.length ? ((data.timedOut ? 'Partly done — ' : 'Done — ') + parts.join(', ') + '.')
+      : 'Done — nothing new to pull (units already saved are never overwritten; units with no Influx data are retried after 12h).';
     setIqRefreshMsg_(msg, data.skipped ? 'err' : 'ok');
   } catch (e) {
     setIqRefreshMsg_('Refresh failed: ' + e.message, 'err');
@@ -2097,7 +2099,7 @@ function liveSocStateFromSample_(sample) {
   }
   if (stateVal === 1) return { key: 'charging', label: 'CHARGING', color: 'var(--pipeline-pass)', chipBg: 'rgba(45,212,191,.14)', fillClass: 'live-soc-fill-charge', fillColor: 'var(--pipeline-pass)', bolt: true, warn: false };
   if (stateVal === 2) return { key: 'discharging', label: 'DISCHARGING', color: 'var(--amber)', chipBg: 'rgba(242,169,0,.14)', fillClass: '', fillColor: 'var(--amber)', bolt: false, warn: false };
-  return { key: 'idle', label: 'IDLE', color: 'var(--text-dim)', chipBg: 'rgba(107,118,132,.14)', fillClass: 'live-soc-fill-idle', fillColor: 'var(--grey)', bolt: false, warn: false };
+  return { key: 'idle', label: 'IDLE', color: 'var(--text-dim)', chipBg: 'rgba(107,118,132,.14)', fillClass: '', fillColor: 'var(--pipeline-pass)', bolt: false, warn: false };
 }
 
 // Same 6 "D — Configuration" checks as runInfluxQc (Cell_SOH, CV_Setting, CV_Point, Heater_Config,
@@ -2173,8 +2175,9 @@ function secondsAgoLabel_(isoTime) {
   return Math.round(m / 60) + 'h ago';
 }
 
-function renderLiveSoc_(target, sample, source) {
-  document.getElementById('liveSocTitle').textContent = 'SYS' + target + ' — Live SOC';
+function renderLiveSoc_(target, sample, source, opts) {
+  opts = opts || {};
+  document.getElementById('liveSocTitle').textContent = 'SYS' + target + ' — SOC';
 
   const st = liveSocStateFromSample_(sample);
   const chip = document.getElementById('liveSocChip');
@@ -2215,8 +2218,8 @@ function renderLiveSoc_(target, sample, source) {
       <div class="live-soc-stat"><div class="live-soc-stat-label">BMS Error 1</div><div class="live-soc-stat-value" style="color:${bms1.color};">${bms1.text}</div></div>
       <div class="live-soc-stat"><div class="live-soc-stat-label">BMS Error 2</div><div class="live-soc-stat-value" style="color:${bms2.color};">${bms2.text}</div></div>
     </div>
-    <div class="live-soc-meta">src ${source}${mostRecentTime ? ' · as of ' + secondsAgoLabel_(mostRecentTime) : ''}</div>
-    <div class="live-soc-meta-sub">from uploaded Influx QC CSV — not a live feed</div>`;
+    <div class="live-soc-meta">src ${source}${opts.savedAt ? ' · saved ' + new Date(opts.savedAt).toLocaleString() : (mostRecentTime ? ' · as of ' + secondsAgoLabel_(mostRecentTime) : '')}</div>
+    <div class="live-soc-meta-sub">${opts.sub || 'from uploaded Influx QC CSV — not a live feed'}</div>`;
 }
 
 function stopLiveSoc() {
@@ -2228,7 +2231,7 @@ function stopLiveSoc() {
 // uploaded/replaced, so the panel always reflects whatever's currently loaded for this unit.
 function refreshLiveSocFromUpload_(target, registryRow) {
   if (target !== liveSocSerial) return;
-  if (!iqParsedData) { renderLiveSocMsg_('Upload the System Testing Influx QC CSV above to see SOC for this unit.'); renderLiveSocChecks_([]); return; }
+  if (!iqParsedData) { loadLiveSocFromSaved_(target); return; } // no CSV loaded - use the result the sync already saved
 
   const isolated = filterParsedToSerial(iqParsedData, target);
   if (!isolated) { renderLiveSocMsg_('Uploaded CSV has no data for SYS' + target + '.'); renderLiveSocChecks_([]); return; }
@@ -2238,6 +2241,48 @@ function refreshLiveSocFromUpload_(target, registryRow) {
 
   renderLiveSoc_(target, sample, iqFileName ? 'CSV: ' + iqFileName : 'uploaded CSV');
   renderLiveSocChecks_(computeLiveConfigChecks_(isolated, registryRow));
+}
+
+// Default source: the row the Apps Script saved to "SysTest Influx QC" after System Testing (no upload needed).
+// Column positions match QC_Sync_AppsScript.gs / INFLUX_QC_COLS; column 76 (BY) is SOC.
+const SAVED_BATTERY_CHECKS = [
+  { label: 'Cell SOH', resultIdx: 54, overrideIdx: 55 },
+  { label: 'CV Setting', resultIdx: 58, overrideIdx: 59 },
+  { label: 'CV Point', resultIdx: 62, overrideIdx: 63 },
+  { label: 'Heater Config', resultIdx: 66, overrideIdx: 67 },
+  { label: 'UL Config', resultIdx: 70, overrideIdx: 71 },
+  { label: 'Crown / HYG', resultIdx: 74, overrideIdx: 75 }
+];
+
+async function loadLiveSocFromSaved_(target, preloadedRun) {
+  const run = preloadedRun === undefined ? await fetchLastInfluxQcRun(target) : preloadedRun;
+  if (target !== liveSocSerial) return; // a different serial was opened while this was loading
+  if (!run) {
+    renderLiveSocMsg_('No saved Influx QC result for SYS' + target + ' yet. Use "Refresh Influx QC" in the Cross-Verification tab.');
+    renderLiveSocChecks_([]);
+    return;
+  }
+  const r = run.row;
+  const num = (v) => (v === undefined || v === null || v === '' || isNaN(parseFloat(v))) ? null : parseFloat(v);
+  const at = r[1];
+  const mk = (v) => v === null ? null : { time: at, value: v };
+  const fault = num(r[4]);
+  const sample = {
+    soc: mk(num(r[76])),
+    state: { time: at, value: 0 },
+    anyFault: mk(fault !== null && fault > 0.6 ? 1 : 0), // same >0.6 fail line the sync uses
+    cellDelta: mk(num(r[16])), modDelta: mk(num(r[20])),
+    bmsError1: mk(num(r[10])), bmsError2: mk(num(r[14])), mainCurrent: null
+  };
+  const socMissing = sample.soc === null;
+  renderLiveSoc_(target, sample, r[51] || 'saved result', {
+    savedAt: at,
+    sub: socMissing ? 'SOC not saved for this unit yet — click Refresh Influx QC to add it' : 'end-of-test snapshot saved by the sync — not a live feed'
+  });
+  renderLiveSocChecks_(SAVED_BATTERY_CHECKS.map(c => {
+    const result = r[c.resultIdx] || '';
+    return { label: c.label, has: result !== '', pass: result === 'PASS' || !!r[c.overrideIdx] };
+  }));
 }
 
 function startLiveSoc(target, registryRow) {
