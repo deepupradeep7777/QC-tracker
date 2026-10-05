@@ -1495,7 +1495,7 @@ function renderInfluxQcPanel() {
 
   let html = `
     <div class="iq-refresh-row">
-      <button class="refresh-btn" id="iqRefreshBtn" onclick="refreshInfluxQcClick()" ${iqRefreshing ? 'disabled' : ''}>${iqRefreshing ? '⟳ Pulling…' : '⟳ Refresh Influx QC'}</button>
+      <button class="refresh-btn" id="iqRefreshBtn" title="Deletes this unit's saved Influx QC result and pulls it again from Influx. Other pending units are pulled too." onclick="refreshInfluxQcClick()" ${iqRefreshing ? 'disabled' : ''}>${iqRefreshing ? '⟳ Pulling…' : '⟳ Refresh Influx QC'}</button>
       <span class="iq-refresh-msg ${iqRefreshKind}" id="iqRefreshMsg">${iqRefreshMsg}</span>
     </div>` + renderLastRunSummary() + `
     <div class="upload-box" id="iqUploadBox" onclick="document.getElementById('iqFileInput').click()">
@@ -1526,7 +1526,7 @@ function renderInfluxQcPanel() {
 // ─── REFRESH INFLUX QC (runs the Apps Script's Influx pull, then reloads the saved result) ──────
 // One-time setup: deploy QC_Sync_AppsScript.gs as a Web App (steps are in the comment above
 // refreshInfluxQc_ in that file), then paste its URL and the REFRESH_KEY script property here.
-const REFRESH_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyT_C4JoJxn74XNJdyxgOQ5Rm1CwjdHGQ9_fr_5xxt3f6L74rA2BLeM2Z5K-7MGoFohJg/exec';
+const REFRESH_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzFywuR5B73UEw8q7TnarYrC66qjUNiD5FQeCcLD5UC2NX8pKYz_QZnAxfxidkBDf711Q/exec';
 const REFRESH_KEY = 'Hjhgi54DWS654sfd6sdgsgsgowpegmn565868fcgdfgdgh';
 let iqRefreshing = false;
 let iqRefreshMsg = '';
@@ -1546,13 +1546,14 @@ async function refreshInfluxQcClick() {
     return;
   }
   const serial = currentSerial;
+  if (serial && !confirm('Re-pull Influx QC for SYS' + serial + '?\n\nThis DELETES its saved Influx QC result (including any bypass switches) and replaces it with fresh data from Influx.\nIf Influx has no valid data for it, the old result is kept.\n\nAny other pending units are pulled in the same click.')) return;
   iqRefreshing = true;
   const btn = document.getElementById('iqRefreshBtn');
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Pulling…'; }
-  setIqRefreshMsg_('Pulling every pending unit — this can take several minutes, keep this tab open…', '');
+  setIqRefreshMsg_((serial ? 'Re-pulling SYS' + serial + ' (its old result is replaced), then any other pending units' : 'Pulling every pending unit') + ' — this can take several minutes, keep this tab open…', '');
   try {
     // text/plain keeps this a "simple" request so the browser doesn't need a CORS preflight (Apps Script can't answer one).
-    const resp = await fetch(REFRESH_ENDPOINT, { method: 'POST', body: JSON.stringify({ action: 'refreshInflux', key: REFRESH_KEY, serial: serial || '' }) });
+    const resp = await fetch(REFRESH_ENDPOINT, { method: 'POST', body: JSON.stringify({ action: 'refreshInflux', key: REFRESH_KEY, serial: serial || '', replace: !!serial }) });
     const data = await resp.json();
     if (!data.ok) throw new Error(data.error || 'Refresh failed');
 
@@ -1564,13 +1565,21 @@ async function refreshInfluxQcClick() {
       if (!iqParsedData) loadLiveSocFromSaved_(serial, iqLastRun); // keep the SOC panel in step with the refreshed row
     }
     const parts = [];
-    if (data.added) parts.push(data.added + ' new result' + (data.added === 1 ? '' : 's') + ' saved');
-    if (data.backfilled) parts.push(data.backfilled + ' updated');
+    if (data.added) parts.push(data.added + ' other pending unit' + (data.added === 1 ? '' : 's') + ' saved');
     if (data.timedOut) parts.push('stopped at the time limit — click again to continue with the rest');
+    const sys = serial ? 'SYS' + serial : 'this unit';
+    const focusMsg = {
+      replaced: sys + ' re-pulled — the old result was replaced with fresh Influx data.',
+      nodata: 'No valid Influx data found for ' + sys + ' — its existing result was kept.',
+      no_systest: 'No System Testing submission found for ' + sys + ' — nothing to anchor the Influx pull to, so its existing result was kept.',
+      not_found: sys + ' is not in the Master Registry.',
+      error: 'Re-pull failed for ' + sys + (data.focusError ? ' (' + data.focusError + ')' : '') + ' — its existing result was kept.'
+    }[data.focusOutcome] || '';
+    const bad = data.focusOutcome && data.focusOutcome !== 'replaced';
     const msg = data.skipped ? ('Nothing pulled — ' + data.skipped + '.')
-      : parts.length ? ((data.timedOut ? 'Partly done — ' : 'Done — ') + parts.join(', ') + '.')
-      : 'Done — nothing new to pull (units already saved are never overwritten; units with no Influx data are retried after 12h).';
-    setIqRefreshMsg_(msg, data.skipped ? 'err' : 'ok');
+      : (focusMsg + (parts.length ? ' Also: ' + parts.join(', ') + '.' : '')).trim()
+        || (parts.length ? ((data.timedOut ? 'Partly done — ' : 'Done — ') + parts.join(', ') + '.') : 'Done — nothing pending to pull.');
+    setIqRefreshMsg_(msg, (data.skipped || bad) ? 'err' : 'ok');
   } catch (e) {
     setIqRefreshMsg_('Refresh failed: ' + e.message, 'err');
   } finally {
