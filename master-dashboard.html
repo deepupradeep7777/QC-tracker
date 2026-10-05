@@ -1069,7 +1069,6 @@ let iqModuleCheck = null;
 let iqModuleOverrides = {};
 
 const LAST_RUN_CHECK_MAP = [
-  { label: 'Any_Fault', valueIdx: 4, resultIdx: 5, overrideIdx: 6 },
   { label: 'Any_Warning', valueIdx: 7, resultIdx: 8, overrideIdx: 9 },
   { label: 'BMS_Error_Code_1', valueIdx: 10, resultIdx: 11, overrideIdx: 12 },
   { label: 'BMS_Error_Code_2', valueIdx: 13, resultIdx: 14, overrideIdx: 15 },
@@ -1308,8 +1307,8 @@ function renderInfluxQcPanel() {
 // ─── REFRESH INFLUX QC (runs the Apps Script's Influx pull, then reloads the saved result) ──────
 // One-time setup: deploy QC_Sync_AppsScript.gs as a Web App (steps are in the comment above
 // refreshInfluxQc_ in that file), then paste its URL and the REFRESH_KEY script property here.
-const REFRESH_ENDPOINT = 'https://script.google.com/macros/s/AKfycbyT_C4JoJxn74XNJdyxgOQ5Rm1CwjdHGQ9_fr_5xxt3f6L74rA2BLeM2Z5K-7MGoFohJg/exec';
-const REFRESH_KEY = 'Hjhgi54DWS654sfd6sdgsgsgowpegmn565868fcgdfgdgh';
+const REFRESH_ENDPOINT = 'PASTE_APPS_SCRIPT_WEB_APP_URL_HERE';
+const REFRESH_KEY = 'PASTE_REFRESH_KEY_HERE';
 let iqRefreshing = false;
 let iqRefreshMsg = '';
 let iqRefreshKind = '';
@@ -1493,7 +1492,6 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
   const lastTime = stateTimes[stateTimes.length - 1];
 
   // ── Block A: checked at the end of each field's OWN cycle ──
-  const anyFault = getFieldLastValue('Any_Fault');
   const anyWarning = getFieldLastValue('Any_Warning');
   const bms1 = getFieldLastValue('BMS_Error_Code_1');
   const bms2 = getFieldLastValue('BMS_Error_Code_2');
@@ -1566,8 +1564,6 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
 
   const checks = [];
 
-  checks.push({ key: 'anyFault', label: 'Any_Fault', block: 'A — Final Rest Window', value: anyFault, expected: '≤ 0.6',
-    pass: anyFault !== null && anyFault <= 0.6, detail: anyFault === null ? 'Not found in CSV' : `Value: ${anyFault}` });
   checks.push({ key: 'anyWarning', label: 'Any_Warning', block: 'A — Final Rest Window', value: anyWarning, expected: '0',
     pass: anyWarning === 0, detail: anyWarning === null ? 'Not found in CSV' : `Value: ${anyWarning}` });
   checks.push({ key: 'bms1', label: 'BMS_Error_Code_1', block: 'A — Final Rest Window', value: bms1, expected: '0 (56 ignored)',
@@ -1913,7 +1909,8 @@ async function saveInfluxQcResult() {
     };
   };
 
-  const af = resultFor('anyFault'), aw = resultFor('anyWarning'), b1 = resultFor('bms1'), b2 = resultFor('bms2');
+  const af = { value: '', result: '', override: '' }, // Any_Fault check removed - columns E:G stay blank so the sheet layout doesn't shift
+    aw = resultFor('anyWarning'), b1 = resultFor('bms1'), b2 = resultFor('bms2');
   const cd = resultFor('cellDelta'), md = resultFor('modDelta'), cr = resultFor('chargeRate'), vt = resultFor('voltage'), bd = resultFor('baud');
   const cm = resultFor('canMaxConsistency'), dur = resultFor('mainCurrentDuration');
   const soh = resultFor('cellSoh'), cvs = resultFor('cvSetting'), cvp = resultFor('cvPoint');
@@ -2085,6 +2082,12 @@ function liveFieldLastValue_(ftv, field) {
   return times.length ? { time: times[times.length - 1], value: ftv[field][times[times.length - 1]] } : null;
 }
 
+// A real BMS error on either code. 0 is fine, and 56 is ignored (it shows on every battery after a power cycle).
+function hasRealBmsError_(b1, b2) {
+  const bad = (b) => b && b.value !== null && b.value !== 0 && Math.round(b.value) !== 56;
+  return !!(bad(b1) || bad(b2));
+}
+
 function latestLiveSocSample_(parsed) {
   const ftv = parsed.fieldTimeValue;
   return {
@@ -2092,7 +2095,7 @@ function latestLiveSocSample_(parsed) {
     state: liveFieldLastValue_(ftv, 'State'),
     cellDelta: liveFieldLastValue_(ftv, 'Cell_Delta'),
     modDelta: liveFieldLastValue_(ftv, 'Mod_Delta'),
-    anyFault: liveFieldLastValue_(ftv, 'Any_Fault'),
+    anyFault: { time: '', value: hasRealBmsError_(liveFieldLastValue_(ftv, 'BMS_Error_Code_1'), liveFieldLastValue_(ftv, 'BMS_Error_Code_2')) ? 1 : 0 },
     mainCurrent: liveFieldLastValue_(ftv, 'Main_Current'),
     bmsError1: liveFieldLastValue_(ftv, 'BMS_Error_Code_1'),
     bmsError2: liveFieldLastValue_(ftv, 'BMS_Error_Code_2')
