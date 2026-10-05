@@ -1133,10 +1133,17 @@ async function toggleLastRunOverride(overrideColIdx, checked) {
   }
 }
 
+// Saved results from before BMS code 56 was ignored still say FAIL - show those two checks as PASS when the saved value is 56.
+function lastRunResult_(r, c) {
+  const res = r[c.resultIdx] || '';
+  const isBmsCheck = c.resultIdx === 11 || c.resultIdx === 14;
+  return (isBmsCheck && res === 'FAIL' && parseFloat(r[c.valueIdx]) === 56) ? 'PASS' : res;
+}
+
 function renderLastRunSummary() {
   if (!iqLastRun) return `<div id="iqLastRunBox"></div>`;
   const r = iqLastRun.row;
-  const overall = r[36] || '';
+  const overall = (r[36] === 'FAIL' && LAST_RUN_CHECK_MAP.every(c => lastRunResult_(r, c) === 'PASS' || !!r[c.overrideIdx])) ? 'PASS' : (r[36] || '');
   const reviewedBy = r[37] || '';
   const runTime = r[1] ? new Date(r[1]).toLocaleString() : '—';
   const dataSource = r[51] || '';
@@ -1144,7 +1151,7 @@ function renderLastRunSummary() {
     const value = c.valueIdx !== undefined ? r[c.valueIdx] : '';
     const expected = c.expectedIdx !== undefined ? r[c.expectedIdx] : null;
     const threshold = c.thresholdIdx !== undefined ? r[c.thresholdIdx] : null;
-    const result = r[c.resultIdx] || '';
+    const result = lastRunResult_(r, c);
     const overridden = !!r[c.overrideIdx];
     const pass = result === 'PASS' || overridden;
     let detail = 'Value: ' + (value === undefined || value === '' ? '—' : value);
@@ -1562,10 +1569,10 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
     pass: anyFault !== null && anyFault <= 0.6, detail: anyFault === null ? 'Not found in CSV' : `Value: ${anyFault}` });
   checks.push({ key: 'anyWarning', label: 'Any_Warning', block: 'A — Final Rest Window', value: anyWarning, expected: '0',
     pass: anyWarning === 0, detail: anyWarning === null ? 'Not found in CSV' : `Value: ${anyWarning}` });
-  checks.push({ key: 'bms1', label: 'BMS_Error_Code_1', block: 'A — Final Rest Window', value: bms1, expected: '0',
-    pass: bms1 === 0, detail: bms1 === null ? 'Not found in CSV' : `Value: ${bms1}` });
-  checks.push({ key: 'bms2', label: 'BMS_Error_Code_2', block: 'A — Final Rest Window', value: bms2, expected: '0',
-    pass: bms2 === 0, detail: bms2 === null ? 'Not found in CSV' : `Value: ${bms2}` });
+  checks.push({ key: 'bms1', label: 'BMS_Error_Code_1', block: 'A — Final Rest Window', value: bms1, expected: '0 (56 ignored)',
+    pass: bms1 === 0 || bms1 === 56, detail: bms1 === null ? 'Not found in CSV' : `Value: ${bms1}` });
+  checks.push({ key: 'bms2', label: 'BMS_Error_Code_2', block: 'A — Final Rest Window', value: bms2, expected: '0 (56 ignored)',
+    pass: bms2 === 0 || bms2 === 56, detail: bms2 === null ? 'Not found in CSV' : `Value: ${bms2}` });
   checks.push({ key: 'cellDelta', label: 'Cell_Delta', block: 'A — Final Rest Window', value: cellDelta, expected: `≤ ${cellDeltaThresh}`,
     pass: cellDelta !== null && cellDelta <= cellDeltaThresh, detail: cellDelta === null ? 'Not found in CSV' : `Value: ${cellDelta.toFixed(2)} (threshold ${cellDeltaThresh})`,
     thresholdUsed: cellDeltaThresh });
@@ -2197,7 +2204,7 @@ function renderLiveSoc_(target, sample, source, opts) {
   const bmsStatVal = (bms) => {
     if (!bms) return { text: '—', color: 'var(--text)' };
     const v = Math.round(bms.value);
-    return { text: String(v), color: v === 0 ? 'var(--text)' : 'var(--danger)' };
+    return { text: String(v), color: (v === 0 || v === 56) ? 'var(--text)' : 'var(--danger)' }; // 56 = power-cycle code, ignored
   };
   const bms1 = bmsStatVal(sample.bmsError1);
   const bms2 = bmsStatVal(sample.bmsError2);
@@ -2272,7 +2279,7 @@ async function loadLiveSocFromSaved_(target, preloadedRun) {
     state: { time: at, value: 0 },
     anyFault: mk(fault !== null && fault > 0.6 ? 1 : 0), // same >0.6 fail line the sync uses
     cellDelta: mk(num(r[16])), modDelta: mk(num(r[20])),
-    bmsError1: mk(num(r[10])), bmsError2: mk(num(r[14])), mainCurrent: null
+    bmsError1: mk(num(r[10])), bmsError2: mk(num(r[13])), mainCurrent: null
   };
   const socMissing = sample.soc === null;
   renderLiveSoc_(target, sample, r[51] || 'saved result', {
