@@ -1137,7 +1137,7 @@ async function toggleLastRunOverride(overrideColIdx, checked) {
 function lastRunResult_(r, c) {
   const res = r[c.resultIdx] || '';
   const isBmsCheck = c.resultIdx === 11 || c.resultIdx === 14;
-  return (isBmsCheck && res === 'FAIL' && parseFloat(r[c.valueIdx]) === 56) ? 'PASS' : res;
+  return (isBmsCheck && res === 'FAIL' && Math.round(parseFloat(r[c.valueIdx])) === 56) ? 'PASS' : res;
 }
 
 function renderLastRunSummary() {
@@ -1570,9 +1570,9 @@ function runInfluxQc(parsed, registryRow, cellDeltaThresh, modDeltaThresh) {
   checks.push({ key: 'anyWarning', label: 'Any_Warning', block: 'A — Final Rest Window', value: anyWarning, expected: '0',
     pass: anyWarning === 0, detail: anyWarning === null ? 'Not found in CSV' : `Value: ${anyWarning}` });
   checks.push({ key: 'bms1', label: 'BMS_Error_Code_1', block: 'A — Final Rest Window', value: bms1, expected: '0 (56 ignored)',
-    pass: bms1 === 0 || bms1 === 56, detail: bms1 === null ? 'Not found in CSV' : `Value: ${bms1}` });
+    pass: bms1 !== null && (bms1 === 0 || Math.round(bms1) === 56), detail: bms1 === null ? 'Not found in CSV' : `Value: ${bms1}` });
   checks.push({ key: 'bms2', label: 'BMS_Error_Code_2', block: 'A — Final Rest Window', value: bms2, expected: '0 (56 ignored)',
-    pass: bms2 === 0 || bms2 === 56, detail: bms2 === null ? 'Not found in CSV' : `Value: ${bms2}` });
+    pass: bms2 !== null && (bms2 === 0 || Math.round(bms2) === 56), detail: bms2 === null ? 'Not found in CSV' : `Value: ${bms2}` });
   checks.push({ key: 'cellDelta', label: 'Cell_Delta', block: 'A — Final Rest Window', value: cellDelta, expected: `≤ ${cellDeltaThresh}`,
     pass: cellDelta !== null && cellDelta <= cellDeltaThresh, detail: cellDelta === null ? 'Not found in CSV' : `Value: ${cellDelta.toFixed(2)} (threshold ${cellDeltaThresh})`,
     thresholdUsed: cellDeltaThresh });
