@@ -181,8 +181,9 @@
   .live-soc-battery-fill { height: 100%; width: 0%; border-radius: 5px 0 0 5px; background: var(--pipeline-pass); transition: width .6s ease; }
   .live-soc-battery-nub { position: absolute; right: -8px; top: 30px; width: 8px; height: 26px; background: var(--border-strong); border-radius: 0 4px 4px 0; }
   .live-soc-battery-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 6px; }
-  .live-soc-pct { font-family: 'JetBrains Mono', monospace; font-size: 23px; font-weight: 700; color: #0b0f13; }
-  .live-soc-bolt, .live-soc-warn { color: #0b0f13; display: flex; }
+  .live-soc-pill { display: flex; align-items: center; gap: 6px; background: rgba(11,15,19,.8); border-radius: 8px; padding: 3px 11px; }
+  .live-soc-pct { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; color: #fff; }
+  .live-soc-bolt, .live-soc-warn { color: #fff; display: flex; }
   .live-soc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
   .live-soc-stat { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; text-align: center; }
   .live-soc-stat-label { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .05em; }
@@ -2195,8 +2196,8 @@ function renderLiveSoc_(target, sample, source, opts) {
 
   const socPct = sample.soc ? Math.max(0, Math.min(100, Math.round(sample.soc.value))) : null;
   const icon = st.bolt
-    ? '<svg class="live-soc-bolt" width="15" height="15" viewBox="0 0 24 24" fill="#0b0f13"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>'
-    : st.warn ? '<svg class="live-soc-warn" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#0b0f13" stroke-width="2.4"><path d="M12 9v4m0 4h.01M10.3 3.9L2.5 17a1 1 0 00.9 1.5h17.2a1 1 0 00.9-1.5L13.7 3.9a1 1 0 00-1.7 0z"/></svg>' : '';
+    ? '<svg class="live-soc-bolt" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>'
+    : st.warn ? '<svg class="live-soc-warn" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 9v4m0 4h.01M10.3 3.9L2.5 17a1 1 0 00.9 1.5h17.2a1 1 0 00.9-1.5L13.7 3.9a1 1 0 00-1.7 0z"/></svg>' : '';
 
   const mostRecentTime = [sample.soc, sample.state, sample.cellDelta].filter(Boolean).map(s => s.time).sort().pop();
 
@@ -2217,7 +2218,7 @@ function renderLiveSoc_(target, sample, source, opts) {
         </div>
       </div>
       <div class="live-soc-battery-nub"></div>
-      <div class="live-soc-battery-overlay">${icon}<span class="live-soc-pct">${socPct === null ? '—' : socPct + '%'}</span></div>
+      <div class="live-soc-battery-overlay"><span class="live-soc-pill">${icon}<span class="live-soc-pct">${socPct === null ? '—' : socPct + '%'}</span></span></div>
     </div>
     <div class="live-soc-grid">
       <div class="live-soc-stat"><div class="live-soc-stat-label">Cell Delta</div><div class="live-soc-stat-value">${sample.cellDelta ? sample.cellDelta.value + 'mV' : '—'}</div></div>
@@ -2273,11 +2274,14 @@ async function loadLiveSocFromSaved_(target, preloadedRun) {
   const num = (v) => (v === undefined || v === null || v === '' || isNaN(parseFloat(v))) ? null : parseFloat(v);
   const at = r[1];
   const mk = (v) => v === null ? null : { time: at, value: v };
-  const fault = num(r[4]);
+  // FAULT chip = a real BMS error code on either code (0 and 56 are fine) - the same two values shown under the battery.
+  const b1 = num(r[10]), b2 = num(r[13]);
+  const realErr = (v) => v !== null && v !== 0 && Math.round(v) !== 56;
+  const fault = (realErr(b1) || realErr(b2)) ? 1 : 0;
   const sample = {
     soc: mk(num(r[76])),
     state: { time: at, value: 0 },
-    anyFault: mk(fault !== null && fault > 0.6 ? 1 : 0), // same >0.6 fail line the sync uses
+    anyFault: mk(fault),
     cellDelta: mk(num(r[16])), modDelta: mk(num(r[20])),
     bmsError1: mk(num(r[10])), bmsError2: mk(num(r[13])), mainCurrent: null
   };
