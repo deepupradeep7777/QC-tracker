@@ -422,6 +422,9 @@ header { position: relative; margin-bottom: 22px; }
 #liveSocCard .live-soc-battery-inner { background: #0d1217; }
 #liveSocCard .live-soc-battery-fill { box-shadow: 0 0 18px rgba(var(--rgb), .9), inset -3px 0 0 rgba(255,255,255,.92), inset -12px 0 14px -8px rgba(255,255,255,.55); }
 #liveSocCard .live-soc-battery-fill::before { content: ''; position: absolute; left: 0; right: 0; top: 4px; height: 24%; border-radius: 4px; background: linear-gradient(rgba(255,255,255,.4), rgba(255,255,255,.04)); }
+#liveSocCard .viz-spark { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #fff; box-shadow: 0 0 6px 2px rgba(var(--rgb), .9); opacity: 0; animation: vizSpark 1.8s ease-out infinite; z-index: 2; pointer-events: none; }
+@keyframes vizSpark { 0% { opacity: 0; transform: translate(0,0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(14px,-22px); } }
+@media (prefers-reduced-motion: reduce) { #liveSocCard .viz-spark { display: none; } }
 #liveSocCard:has(.live-soc-fill-fault) .live-soc-battery-body { animation: vizFlick 1.1s steps(1) infinite; }
 #liveSocCard .live-soc-pct { text-shadow: 0 0 8px rgba(var(--rgb), .9); }
 #liveSocCard .live-soc-stat { background: #0c1014; border-color: #232c36; }
@@ -2952,6 +2955,22 @@ async function selectShippingSerial(idx) {
       try { if (typeof currentSerial !== 'undefined' && currentSerial && currentSerial !== pfDone) { clearTimeout(pfTimer); pfTimer = setTimeout(prefetchInflux, 100); } } catch (e) {}
     }
   }
+  /* ---------- sparks flying off the leading edge (idle: 2, charging: 3, none otherwise) ---------- */
+  function addSparks(body) {
+    const bat = $('.live-soc-battery', body), fill = $('.live-soc-battery-fill', body);
+    if (!bat || !fill || $('.viz-spark', bat)) return;
+    const n = fill.classList.contains('live-soc-fill-charge') ? 3 : fill.classList.contains('live-soc-fill-idle') ? 2 : 0;
+    const pct = parseFloat(fill.getAttribute('data-w')) || 0;
+    if (!n || pct <= 0) return;
+    const left = 9 + 168 * Math.min(pct, 100) / 100 - 2;
+    const tops = n === 3 ? [30, 46, 58] : [34, 52], delays = n === 3 ? [0, .6, 1.2] : [0, .9];
+    tops.forEach((t, i) => {
+      const el = document.createElement('i');
+      el.className = 'viz-spark';
+      el.style.cssText = 'left:' + left.toFixed(1) + 'px;top:' + t + 'px;animation-delay:' + delays[i] + 's';
+      bat.appendChild(el);
+    });
+  }
   /* ---------- SOC count-up (ends on the exact original text) ---------- */
   function countUp(el) {
     const original = el.textContent.trim();
@@ -2967,6 +2986,7 @@ async function selectShippingSerial(idx) {
   try {
     const body = document.getElementById('liveSocBody');
     if (body && !reduced) new MutationObserver(() => {
+      try { addSparks(body); } catch (e) {}
       $$('.live-soc-pct', body).forEach(countUp);
       $$('.live-soc-stat-value', body).forEach(el => { if (/mV$/.test(el.textContent)) countUp(el); });
     }).observe(body, { childList: true });
