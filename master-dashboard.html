@@ -2823,6 +2823,7 @@ async function selectShippingSerial(idx) {
 
   /* ---------- restart entrance animations when a different serial opens ---------- */
   let lastSerial = null;
+  let pfBusy = false, pfTimer = null, pfDone = null;
   function replayAnimations() {
     if (reduced) return;
     $$('.result-card.show, .stage-num, .cc-row, .iq-check, .live-soc-check-badge, #vizSummary > *').forEach(el => {
@@ -2870,7 +2871,7 @@ async function selectShippingSerial(idx) {
       if (!box) { box = document.createElement('div'); box.id = 'vizSummary'; host.insertBefore(box, tabs); }
 
       const serial = (typeof currentSerial !== 'undefined' && currentSerial) ? currentSerial : '';
-      if (serial !== lastSerial) { lastSerial = serial; box.innerHTML = ''; setTimeout(replayAnimations, 30); }
+      if (serial !== lastSerial) { lastSerial = serial; box.innerHTML = ''; setTimeout(replayAnimations, 30); try { clearTimeout(pfTimer); pfTimer = setTimeout(prefetchInflux, 500); } catch (e) {} }
 
       const nameEl = $('#specPanel .spec-header .name'), metaEl = $('#specPanel .spec-header .meta');
       let overall = null;
@@ -2927,6 +2928,30 @@ async function selectShippingSerial(idx) {
     if (rw) mo.observe(rw, { attributes: true, attributeFilter: ['style'] });
   } catch (e) { console.warn('[visual-layer] observe', e); }
 
+  /* ---------- background load of the Influx QC result ----------
+     The red counts on the Cross-Verification tab include Influx QC fails, but that result was only
+     fetched once the tab was opened. This calls the dashboard's own ensureInfluxQcPanelInit() (the
+     same function the tab click uses) quietly after a serial opens, so the counts are ready.
+     One load at a time; if you moved to another serial meanwhile, it reloads for the new one. */
+  async function prefetchInflux() {
+    if (pfBusy) return;
+    try {
+      if (typeof ensureInfluxQcPanelInit !== 'function' || typeof currentSerial === 'undefined' || !currentSerial) return;
+      if (typeof accessToken === 'undefined' || !accessToken) return;
+      const serial = currentSerial;
+      if (serial === pfDone) return;
+      const crossOpen = $('#detailPanelCross') && $('#detailPanelCross').classList.contains('show');
+      if (crossOpen) { pfDone = serial; return; }
+      if (typeof iqRefreshing !== 'undefined' && iqRefreshing) return;
+      pfBusy = true;
+      await ensureInfluxQcPanelInit();
+      pfDone = serial;
+    } catch (e) { console.warn('[visual-layer] prefetch', e); }
+    finally {
+      pfBusy = false;
+      try { if (typeof currentSerial !== 'undefined' && currentSerial && currentSerial !== pfDone) { clearTimeout(pfTimer); pfTimer = setTimeout(prefetchInflux, 100); } } catch (e) {}
+    }
+  }
   /* ---------- SOC count-up (ends on the exact original text) ---------- */
   function countUp(el) {
     const original = el.textContent.trim();
