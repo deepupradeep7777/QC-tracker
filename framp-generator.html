@@ -896,7 +896,12 @@ function parseSpec(){
   }
 
   const modulesVal = find('modules') || '';
-  const modCountMatch = modulesVal.match(/^\s*(\d+)/);
+  let modCountMatch = modulesVal.match(/^\s*(\d+)/);
+  // Rule: on a stringed pack (MODS_PER_STRING = 2, i.e. above 48V), "N string" in the module field means N x 2 modules.
+  const stringMatch = (modulesVal + ' ' + (find('module') || '')).match(/(\d+)\s*-?\s*strings?\b/i);
+  if (stringMatch && parseInt(state.pack) > 48){
+    modCountMatch = [null, String(parseInt(stringMatch[1]) * 2)];
+  }
   if (modCountMatch) document.getElementById('modules').value = modCountMatch[1];
 
   const moduleWarn = document.getElementById('moduleCountWarning');
@@ -1069,7 +1074,7 @@ function parseSpec(){
   if (!vMatch) mandatoryMissing.push('Module Voltage (24/36/48/80/etc)');
   if (!heaterVal) mandatoryMissing.push('Heater');
   if (!modCountMatch) mandatoryMissing.push('Number of Modules');
-  if (!bmidVal) mandatoryMissing.push('BMID');
+  // BMID missing is a rare case and is treated as N/A (not mandatory)
   if (!hygVal) mandatoryMissing.push('Hyg/Crown');
   if (!chargeMatch) mandatoryMissing.push('Charge Rate');
   if (!chargerVal) mandatoryMissing.push('Charger');
