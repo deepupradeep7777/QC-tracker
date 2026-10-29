@@ -79,7 +79,7 @@
   /* Stage pipeline (reused pattern from QC Tracker) */
   .line-wrap { position: relative; margin-bottom: 36px; }
   .line-track { position: absolute; top: 34px; left: 34px; right: 34px; height: 2px; background: var(--border); z-index: 0; }
-  .stages { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; position: relative; z-index: 1; }
+  .stages { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; position: relative; z-index: 1; }
   .stage { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
   .stage-num { width: 60px; height: 60px; border-radius: 50%; background: var(--panel); border: 2px solid var(--grey); display: flex; align-items: center; justify-content: center; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; color: var(--text-faint); transition: border-color 0.3s, color 0.3s, background 0.3s; }
   .stage-num.checking { border-color: var(--blue); color: var(--blue); animation: pulse 1.1s ease-in-out infinite; }
@@ -352,13 +352,13 @@ header { position: relative; margin-bottom: 22px; }
 .stage-num.pass { box-shadow: 0 0 14px color-mix(in srgb, var(--pipeline-pass) 35%, transparent); animation: vizStagePop .55s cubic-bezier(.3,1.5,.5,1) both; }
 .stage-num.fail { box-shadow: 0 0 14px color-mix(in srgb, var(--danger) 35%, transparent); animation: vizStageFail .55s ease both; }
 .stage-num.checking { animation: vizRipple 1.2s ease-in-out infinite; }
-.stage:nth-child(1) .stage-num{animation-delay:.05s}.stage:nth-child(2) .stage-num{animation-delay:.17s}.stage:nth-child(3) .stage-num{animation-delay:.29s}.stage:nth-child(4) .stage-num{animation-delay:.41s}.stage:nth-child(5) .stage-num{animation-delay:.53s}.stage:nth-child(6) .stage-num{animation-delay:.65s}.stage:nth-child(7) .stage-num{animation-delay:.77s}
+.stage:nth-child(1) .stage-num{animation-delay:.05s}.stage:nth-child(2) .stage-num{animation-delay:.17s}.stage:nth-child(3) .stage-num{animation-delay:.29s}.stage:nth-child(4) .stage-num{animation-delay:.41s}.stage:nth-child(5) .stage-num{animation-delay:.53s}.stage:nth-child(6) .stage-num{animation-delay:.65s}.stage:nth-child(7) .stage-num{animation-delay:.77s}.stage:nth-child(8) .stage-num{animation-delay:.89s}
 
 /* ── result cards ── */
 .result-card { border-radius: 10px; box-shadow: var(--shadow); transition: border-color .2s, background .2s; }
 .result-card:hover { background: color-mix(in srgb, var(--panel-raised) 55%, var(--panel)); }
 .result-card.show { animation: vizSlide .45s ease both; }
-#results .result-card:nth-child(1){animation-delay:.04s}#results .result-card:nth-child(2){animation-delay:.1s}#results .result-card:nth-child(3){animation-delay:.16s}#results .result-card:nth-child(4){animation-delay:.22s}#results .result-card:nth-child(5){animation-delay:.28s}#results .result-card:nth-child(6){animation-delay:.34s}#results .result-card:nth-child(7){animation-delay:.4s}
+#results .result-card:nth-child(1){animation-delay:.04s}#results .result-card:nth-child(2){animation-delay:.1s}#results .result-card:nth-child(3){animation-delay:.16s}#results .result-card:nth-child(4){animation-delay:.22s}#results .result-card:nth-child(5){animation-delay:.28s}#results .result-card:nth-child(6){animation-delay:.34s}#results .result-card:nth-child(7){animation-delay:.4s}#results .result-card:nth-child(8){animation-delay:.46s}
 .result-card.checking { background: linear-gradient(90deg, var(--panel) 25%, var(--panel-raised) 50%, var(--panel) 75%); background-size: 200% 100%; animation: vizShimmer 1.2s linear infinite; }
 .result-status.checking { background: color-mix(in srgb, var(--blue) 16%, transparent); }
 .result-status.pass::before, .cc-badge.match::before { content: '✓ '; }
@@ -458,7 +458,7 @@ header { position: relative; margin-bottom: 22px; }
 .viz-attn-more { padding: 8px 4px 0; font-size: 12px; color: var(--text-faint); }
 @media (max-width: 700px) {
   body { padding: 20px 12px 60px; }
-  .stages { grid-template-columns: repeat(7, minmax(62px, 1fr)); overflow-x: auto; padding-bottom: 6px; }
+  .stages { grid-template-columns: repeat(8, minmax(62px, 1fr)); overflow-x: auto; padding-bottom: 6px; }
   .line-wrap { overflow-x: auto; }
   .line-track { display: none; }
   .stage-num { width: 46px; height: 46px; }
@@ -569,7 +569,7 @@ header { position: relative; margin-bottom: 22px; }
       <div class="section-title">Shipping <span class="badge">manual confirmation, this dashboard only</span></div>
       <div class="spec-panel" id="shipPanel"></div>
 
-      <div class="section-title">QC Pipeline <span class="badge">7 stages · live from production sheets</span></div>
+      <div class="section-title">QC Pipeline <span class="badge">8 stages · live from production sheets</span></div>
       <div class="line-wrap">
         <div class="line-track"></div>
         <div class="stages" id="stages"></div>
@@ -620,7 +620,7 @@ header { position: relative; margin-bottom: 22px; }
    </div>
   </div>
 
-  <footer>Master Battery Dashboard · Stromcore · reads Master Registry + all 7 QC Tracker stage sheets, writes Shipping Confirmed flag + System Testing Influx QC results</footer>
+  <footer>Master Battery Dashboard · Stromcore · reads Master Registry + all 8 QC stage sources, writes Shipping Confirmed flag + System Testing Influx QC results</footer>
 </div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -690,14 +690,15 @@ const INFLUX_QC_COLS = [
 ]; // 51 cols, A..AY — Module Count/Position appended at the end (AT-AY), same append-only pattern as before.
 const IQ_STANDARD_BAUD = 250; // your CAN1_Baud standard — Registry doesn't carry a baud column, so this is the fixed expectation
 
-// Same 7 stages/fileIds as the QC Tracker (Google Cloud OAuth version) — kept in sync manually.
+// Same stages/fileIds as the QC Tracker (Google Cloud OAuth version) — kept in sync manually.
 const STAGES = [
   { id: 'module', label: 'Module QC', tag: 'PWI0005/6/7', fileId: '1qii-StLhMPAmXcaD0bjKjPAJYNBVxxmubMDoUww-eW0', sheetName: 'QC Passed', colRange: 'A1:B', mode: 'module', systestFileId: '1NGIsb9SbsgE7JlyZjvpa8iS9z20H1Wy4s7CgMvH1CtE', systestSheetName: 'Sheet1' },
-  { id: 'weight', label: 'Weight Study', tag: 'QC-WT', fileId: '1DsO4ip2Lpi0mWuQpR2qScxNP9dB07c8n_HJQZhgSVoU', sheetName: 'Sheet1', colRange: 'A1:C', mode: 'weight' },
   { id: 'powershelf', label: 'Powershelf QC', tag: 'PWI0031/32', fileId: '1z0g1mb6S7mjnvoi9gncOUe-HhunZgkpZI7vEO02Rpcc', sheetName: 'Powershelf', matchColumnIndex: 2, excludeOldScheme: /^p\s*s\s*-{0,2}\s*\d+/i, displayFields: [{ label: 'Built by', index: 4 }, { label: 'Build QC', index: 5 }, { label: 'Final QC', index: 1 }] },
   { id: 'closeup', label: 'Closeup QC', tag: 'PWI0052', fileId: '1-nlnX1F3cGcAPvPFKfiJZHpfOOle1e6wdfbHvssmBOo', sheetName: 'Sheet1', matchColumnIndex: 4, displayFields: [{ label: 'Built by', index: 1 }, { label: 'QC', index: 2 }] },
   { id: 'systest', label: 'System Testing', tag: 'PWI0056', fileId: '1NGIsb9SbsgE7JlyZjvpa8iS9z20H1Wy4s7CgMvH1CtE', sheetName: 'Sheet1', matchColumnIndex: 2, displayFields: [{ label: 'Tester', index: 1 }] },
+  { id: 'weight', label: 'Weight Study', tag: 'QC-WT', fileId: '1DsO4ip2Lpi0mWuQpR2qScxNP9dB07c8n_HJQZhgSVoU', sheetName: 'Sheet1', colRange: 'A1:C', mode: 'weight' },
   { id: 'telemetry', label: 'Telemetry QC', tag: 'PWI0011/39', fileId: '1Q6ol_WiF_x9nND5odr3EQ4KIVp41V-CYJ0oS0HeSLP4', sheetName: 'Sheet1', mode: 'telemetry' },
+  { id: 'batterycheck', label: 'Battery Check', tag: 'INFLUX LOOKUP', fileId: '1zob1WVygVQWaX2B8GEQIOyxMX7fSz0vpBxgJczMD5Yc', sheetName: 'Lookup Log', mode: 'batterycheck' },
   { id: 'packaging', label: 'Final Packaging', tag: 'PWI0069', fileId: '1hEoGdyz6yAzRAjx8u-B7cW_KQeD6XgQhie2_20sUknQ', sheetName: 'Sheet1', mode: 'packaging' },
 ];
 
@@ -1067,6 +1068,20 @@ async function checkStage(stage, serial) {
       return;
     }
 
+    if (stage.mode === 'batterycheck') {
+      // Lookup Log: A=Timestamp, B=Checked By, C=Serial (SYS#####), D=Result. Latest row for the serial decides.
+      let latest = null;
+      for (let i = 1; i < rows.length; i++) {
+        const sm = String(rows[i][2] || '').trim().match(/^(?:sys)?\s*0*(\d+)$/i);
+        if (!sm || sm[1] !== target) continue;
+        if (!latest || new Date(rows[i][0]) >= new Date(latest[0])) latest = rows[i];
+      }
+      if (!latest) { setStageUI(stage.id, 'fail', 'Missing', `System ${serial} not found in the Battery Check log.`, null); return; }
+      const res = String(latest[3] || '').trim().toUpperCase();
+      setStageUI(stage.id, res === 'PASS' ? 'pass' : 'fail', res === 'PASS' ? 'Pass' : (res || 'No result'), `Checked by ${latest[1] || '—'} · ${latest[0] || ''}`, latest[11] ? String(latest[11]) : null);
+      return;
+    }
+
     if (stage.mode === 'telemetry') {
       const found = aggregateTelemetryStages(rows, target);
       const sections = Object.keys(found);
@@ -1119,7 +1134,7 @@ async function checkStage(stage, serial) {
 // Maps the Apps Script sync's stage names (in the AG summary text) to this page's STAGES ids/labels/tags.
 const SYNCED_STAGE_MAP = {
   Module: 'module', Weight: 'weight', Powershelf: 'powershelf', Closeup: 'closeup',
-  SystemTest: 'systest', Telemetry: 'telemetry', Packaging: 'packaging'
+  SystemTest: 'systest', Telemetry: 'telemetry', BatteryCheck: 'batterycheck', Packaging: 'packaging'
 };
 
 // Parses Telemetry's pipe-separated section detail (e.g. "WiFi(Influx:X,Final:Y,VPN:✓)|OBT(...)")
@@ -1450,43 +1465,94 @@ function ensureSystemNotesPanelInit() {
   // no separate fetch of the full System Testing QC form needed, keeping Synced mode at 2 sheets.
   const comment = registryRow ? registryRow[REG_COMMENTS_COL] : '';
   commentsPanel.innerHTML = comment && String(comment).trim()
-    ? `<div style="white-space:pre-wrap; font-size:13.5px; line-height:1.6;">${comment}</div>`
+    ? `<div style="white-space:pre-wrap; font-size:13.5px; line-height:1.6;">${escNote_(comment)}</div>`
     : `<div class="spec-empty">No comments synced yet for this Serial - run the QC Sync Apps Script, or none were entered on the form.</div>`;
 
 
-  const existingNotes = registryRow ? (registryRow[REG_NOTES_COL] || '') : '';
-  notesPanel.innerHTML = `
-    <textarea id="userNotesInput" rows="6" style="width:100%; background:var(--panel-raised); border:1px solid var(--border-strong); border-radius:6px; padding:10px 12px; color:var(--text); font-family:'Inter',sans-serif; font-size:13.5px; resize:vertical;" placeholder="Add your own notes for this unit...">${existingNotes}</textarea>
+  renderNotesPanel_(target, registryRow ? (registryRow[REG_NOTES_COL] || '') : '', false);
+}
+
+// ─── SYSTEM NOTES AS A COMMENT THREAD ────────────────────────────────────────
+// Each submitted note is appended to the Registry's notes cell and shown read-only. Notes can't be
+// edited afterwards; the only action is "Add another note". Old free-text notes show as "Earlier note".
+const NOTE_HEADER = '***SUPERVISOR NOTE***';
+const NOTE_SEP = '\n\n──────────\n\n';
+function escNote_(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function renderNotesPanel_(target, raw, openBox) {
+  const notesPanel = document.getElementById('userNotesPanel');
+  const entries = String(raw || '').split(NOTE_SEP).map(x => x.trim()).filter(Boolean);
+  const cards = entries.map(e => {
+    const isNote = e.indexOf(NOTE_HEADER) === 0;
+    const body = isNote ? e.slice(NOTE_HEADER.length).replace(/^\s+/, '') : e;
+    return `<div style="background:var(--panel-raised); border:1px solid var(--border); border-left:3px solid var(--amber); border-radius:6px; padding:10px 14px; margin-bottom:10px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10.5px; font-weight:700; letter-spacing:.06em; color:var(--amber); margin-bottom:6px;">${isNote ? NOTE_HEADER : 'EARLIER NOTE'}</div>
+      <div style="white-space:pre-wrap; font-size:13.5px; line-height:1.6;">${escNote_(body)}</div>
+    </div>`;
+  }).join('');
+  const box = `
+    <textarea id="userNotesInput" rows="5" style="width:100%; background:var(--panel-raised); border:1px solid var(--border-strong); border-radius:6px; padding:10px 12px; color:var(--text); font-family:'Inter',sans-serif; font-size:13.5px; resize:vertical;"></textarea>
     <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
-      <button class="refresh-btn" onclick="saveUserNotes('${target}')">💾 Save Notes</button>
+      <button class="refresh-btn" id="userNotesSubmit" onclick="saveUserNotes('${target}')">Submit note</button>
+      ${entries.length ? `<button class="refresh-btn" onclick="renderNotesPanel_('${target}', window.__notesRaw, false)">Cancel</button>` : ''}
       <span id="userNotesStatus" style="font-size:12px; color:var(--text-dim);"></span>
     </div>`;
+  window.__notesRaw = raw || '';
+  const showBox = openBox || !entries.length;
+  notesPanel.innerHTML = cards
+    + (showBox ? box : `<button class="refresh-btn" onclick="renderNotesPanel_('${target}', window.__notesRaw, true)">+ Add another note</button>`)
+    + `<div id="userNotesStatusDone" style="font-size:12px; color:var(--text-dim); margin-top:8px;"></div>`;
+  if (showBox) {
+    const ta = document.getElementById('userNotesInput');
+    ta.value = NOTE_HEADER + '\n';
+    ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
 }
 
 async function saveUserNotes(target) {
   if (!accessToken) return;
-  const text = document.getElementById('userNotesInput').value;
+  const ta = document.getElementById('userNotesInput');
   const status = document.getElementById('userNotesStatus');
-  status.textContent = 'Saving...';
+  const btn = document.getElementById('userNotesSubmit');
+  let text = ta.value.trim();
+  if (text.indexOf(NOTE_HEADER) !== 0) text = NOTE_HEADER + '\n' + text;
+  if (!text.slice(NOTE_HEADER.length).trim()) { status.textContent = 'Type your note below the header line first.'; status.style.color = 'var(--danger)'; return; }
+  if (!confirm('Submit this note? It cannot be edited afterwards.')) return;
+  btn.disabled = true; ta.disabled = true;
+  status.textContent = 'Saving...'; status.style.color = 'var(--text-dim)';
   try {
-    const key = REGISTRY.fileId + '::' + REGISTRY.sheetName;
-    const rows = sheetCache[key];
-    let rowIdx = -1;
-    if (rows) { for (let i = 1; i < rows.length; i++) { if (normalizeTarget(rows[i][0] || '') === target) { rowIdx = i; break; } } }
-    if (rowIdx === -1) throw new Error('No Registry entry for this Serial.');
-
+    // Re-find the unit's row and re-read the live notes cell right now, so nothing is overwritten
+    // and the note can't land on the wrong battery if the sheet changed since it was loaded.
     const colL = colLetter(REG_NOTES_COL);
-    const range = encodeURIComponent(`${REGISTRY.sheetName}!${colL}${rowIdx + 1}`);
-    const resp = await fetch(`${SHEETS_API}/${REGISTRY.fileId}/values/${range}?valueInputOption=USER_ENTERED`, {
+    const sheet = REGISTRY.sheetName;
+    const q = ['A1:A', colL + '1:' + colL].map(r => 'ranges=' + encodeURIComponent(`${sheet}!${r}`)).join('&');
+    const getResp = await fetch(`${SHEETS_API}/${REGISTRY.fileId}/values:batchGet?${q}`, { headers: { Authorization: 'Bearer ' + accessToken } });
+    if (!getResp.ok) { const err = await getResp.text(); throw new Error(`${getResp.status}: ${err.slice(0,150)}`); }
+    const vr = (await getResp.json()).valueRanges || [];
+    const serials = (vr[0] && vr[0].values) || [], notes = (vr[1] && vr[1].values) || [];
+    let rowNum = -1;
+    for (let i = 1; i < serials.length; i++) { if (normalizeTarget((serials[i] && serials[i][0]) || '') === target) { rowNum = i + 1; break; } }
+    if (rowNum === -1) throw new Error('No Registry entry for this Serial.');
+    const current = String((notes[rowNum - 1] && notes[rowNum - 1][0]) || '').trim();
+    const combined = current ? current + NOTE_SEP + text : text;
+
+    const range = encodeURIComponent(`${sheet}!${colL}${rowNum}`);
+    const resp = await fetch(`${SHEETS_API}/${REGISTRY.fileId}/values/${range}?valueInputOption=RAW`, {
       method: 'PUT',
       headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ values: [[text]] })
+      body: JSON.stringify({ values: [[combined]] })
     });
     if (!resp.ok) { const err = await resp.text(); throw new Error(`${resp.status}: ${err.slice(0,150)}`); }
-    rows[rowIdx][REG_NOTES_COL] = text;
-    status.textContent = 'Saved at ' + new Date().toLocaleTimeString();
-    status.style.color = 'var(--success)';
+
+    const rows = sheetCache[REGISTRY.fileId + '::' + REGISTRY.sheetName];
+    if (rows) { for (let i = 1; i < rows.length; i++) { if (normalizeTarget(rows[i][0] || '') === target) { rows[i][REG_NOTES_COL] = combined; break; } } }
+    if (normalizeTarget(currentSerial) === target) {
+      renderNotesPanel_(target, combined, false);
+      const done = document.getElementById('userNotesStatusDone');
+      if (done) { done.textContent = 'Submitted at ' + new Date().toLocaleTimeString(); done.style.color = 'var(--success)'; }
+    }
   } catch (e) {
+    btn.disabled = false; ta.disabled = false;
     status.textContent = 'Failed to save: ' + e.message;
     status.style.color = 'var(--danger)';
   }
