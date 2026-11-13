@@ -386,7 +386,7 @@
 </div>
 
 <script>
-const state = { pack:'48', source:'production', cellCap:'60', heater:'yes', ul:'no' };
+const state = { pack:'48', source:'production', cellCap:'60', heater:'yes', ul:'no', stringed24:false };
 
 // ═══════════════════════════ MASTER REGISTRY INTEGRATION ═══════════════════════════
 const REG_CLIENT_ID = '1848041462-n1kcsireto5o27u8cptuee6riofm44o3.apps.googleusercontent.com';
@@ -707,6 +707,7 @@ function wireRadioGroup(rowId, key){
       row.querySelectorAll('.radio-btn').forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
       state[key] = btn.dataset.val;
+      if (key === 'pack') state.stringed24 = false; // picking a pack by hand switches the 24V-string rule off
       onChange();
     });
   });
@@ -980,7 +981,25 @@ function parseSpec(){
   const vMatch = modelVal.match(/(\d+)\s*v/i);
   const voltageWarn = document.getElementById('voltageWarning');
   voltageWarn.style.display = 'none';
-  if (vMatch){
+  state.stringed24 = false;
+  // Rule: 24V modules built into strings of 2 -> the model number can say 51V, but the pack is a 48V pack with
+  // MODS_PER_STRING 2 and MOD_1_V = MOD_2_V = 24. A model number of 85V is the 80V pack.
+  const moduleVMatch = ((find('module') || '') + '').match(/(\d+)\s*v/i);
+  const moduleV = moduleVMatch ? parseInt(moduleVMatch[1]) : null;
+  const modelV = vMatch ? parseInt(vMatch[1]) : null;
+  const stringsMentioned = /string/i.test((find('modules') || '') + ' ' + (find('module') || ''));
+  if (vMatch && moduleV === 24 && modelV > 24 && (modelV === 48 || modelV === 51 || stringsMentioned)){
+    state.stringed24 = true;
+    document.getElementById('actualVoltage').value = 48;
+    setRadio('packRow','pack','48');
+    voltageWarn.style.display = 'block';
+    voltageWarn.textContent = `ℹ 24V modules in strings of 2: model says ${modelV}V, treated as a 48V pack. Global Config: MODS_PER_STRING 2, MOD_1_V 24, MOD_2_V 24.`;
+  } else if (vMatch && modelV === 85){
+    document.getElementById('actualVoltage').value = 80;
+    setRadio('packRow','pack','80');
+    voltageWarn.style.display = 'block';
+    voltageWarn.textContent = 'ℹ Model says 85V, treated as an 80V pack.';
+  } else if (vMatch){
     const v = parseInt(vMatch[1]);
     document.getElementById('actualVoltage').value = v;
     let bucket;
@@ -1001,7 +1020,7 @@ function parseSpec(){
   let modCountMatch = modulesVal.match(/^\s*(\d+)/);
   // Rule: on a stringed pack (MODS_PER_STRING = 2, i.e. above 48V), "N string" in the module field means N x 2 modules.
   const stringMatch = (modulesVal + ' ' + (find('module') || '')).match(/(\d+)\s*-?\s*strings?\b/i);
-  if (stringMatch && parseInt(state.pack) > 48){
+  if (stringMatch && (parseInt(state.pack) > 48 || state.stringed24)){
     modCountMatch = [null, String(parseInt(stringMatch[1]) * 2)];
   }
   if (modCountMatch) document.getElementById('modules').value = modCountMatch[1];
@@ -1013,7 +1032,7 @@ function parseSpec(){
     const ahModelMatch = modelVal.match(/(\d+)\s*ah/i);
     if (ahModelMatch){
       const baseModules = parseInt(ahModelMatch[1]) / 100;
-      const isStringed = ['80'].includes(packBucket) || (document.getElementById('actualVoltage').value && parseInt(document.getElementById('actualVoltage').value) > 48);
+      const isStringed = state.stringed24 || ['80'].includes(packBucket) || (document.getElementById('actualVoltage').value && parseInt(document.getElementById('actualVoltage').value) > 48);
       const expectedModules = isStringed ? baseModules * 2 : baseModules;
       const statedModules = parseInt(modCountMatch[1]);
       if (Number.isInteger(expectedModules) && expectedModules !== statedModules){
@@ -1255,6 +1274,8 @@ function render(){
     // covers 80V and other >48V cases (including unconfirmed odd voltages, flagged separately in UI)
     modsPerString = 2; mod1V = 36; mod2V = 48;
   }
+
+  if (state.stringed24){ modsPerString = 2; mod1V = 24; mod2V = 24; }   // 24V modules in strings of 2 (48V pack)
 
   const ulOn = state.ul === 'yes';
   const ulResult = ulOn ? computeUlConfig() : null;
