@@ -314,7 +314,7 @@
           <div><label>Ports</label><select id="ulPorts"><option value="1">Single</option><option value="2">Dual</option></select></div>
           <div><label>Port Type</label><select id="ulPortType"><option value="1">Euro</option><option value="2">LV</option></select></div>
         </div>
-        <div class="hint">Discharge/charge limits auto-derate to modules × 100A if lower than the table max. ≥700Ah USA units use higher charge limits per the UL guide.</div>
+        <div class="hint">Discharge/charge limits auto-derate to capacity (modules ÷ MODS_PER_STRING × 100A) if lower than the table max. ≥700Ah USA units use higher charge limits per the UL guide.</div>
       </div>
     </fieldset>
 
@@ -776,6 +776,15 @@ function detectLayout(enclosureText, modelText, modules, harnessText){
 
 function dcdcCount(modules){ return Math.ceil(modules / 4); }
 
+// MODS_PER_STRING for the current form state (same rule the Global Config block uses).
+function currentModsPerString(){
+  if (state.stringed24) return 2;
+  const v = document.getElementById('actualVoltage').value;
+  const actualV = v ? parseInt(v) : parseInt(state.pack);
+  if (actualV === 24 || actualV <= 48) return 1;
+  return 2;
+}
+
 function computeUlConfig(){
   const country = document.getElementById('ulCountry').value;
   const ports = document.getElementById('ulPorts').value;
@@ -799,18 +808,22 @@ function computeUlConfig(){
   }
   if (!limits) return {code, discharge:'?', charge:'?', note:'Unrecognized combination'};
 
-  // UL FRAMP CURRENT LOGIC (confirmed Aug 2026, not in the written UL Config Guide):
-  // moduleCapacity = #modules x 100A. Compare against the UL Charge limit (with ≥700Ah variant applied).
-  // If moduleCapacity > Charge limit -> port-limited -> NO derate -> enter the stated Charge Rate as-is.
-  // If moduleCapacity < Charge limit -> module-limited -> DERATE -> enter (moduleCapacity - 5A).
-  // The -5A comes off the module capacity number, never off the stated Charge Rate directly.
-  const moduleCapacity = modules * 100;
+  // UL FRAMP CURRENT LOGIC (confirmed Aug 2026, updated Nov 2026; not in the written UL Config Guide):
+  // Current capacity = (# modules / MODS_PER_STRING) x 100A.
+  //   Non-stringed (MODS_PER_STRING = 1): modules x 100A. Stringed (= 2): strings x 100A (equals the pack Ah).
+  // Compare against the UL Charge limit (with ≥700Ah variant applied).
+  // If capacity > Charge limit -> port-limited -> NO derate -> enter the stated Charge Rate as-is.
+  // If capacity < Charge limit -> module-limited -> DERATE -> enter (capacity - 5A).
+  // The -5A comes off the capacity number, never off the stated Charge Rate directly.
+  const modsPerString = currentModsPerString();
+  const strings = Math.floor(modules / modsPerString);
+  const moduleCapacity = strings * 100;
   const isPortLimited = moduleCapacity > limits.c;
   const finalCurrent = isPortLimited ? chargeRateInput : (moduleCapacity - 5);
 
   return {
     code, dischargeLimit: limits.d, chargeLimit: limits.c,
-    moduleCapacity, isPortLimited, finalCurrent, note
+    moduleCapacity, modsPerString, strings, isPortLimited, finalCurrent, note
   };
 }
 
@@ -1339,9 +1352,10 @@ function render(){
     html += `<div class="confirm-box"><div class="cb-title">Needs input</div><div class="cb-line">P&amp;S unit — <b>cell_soh</b> has no default and must be entered before this table is final.</div></div>`;
   }
   if (ulOn){
+    const capTxt = ulResult.modsPerString === 2 ? `${ulResult.strings} strings × 100A` : `${ulResult.strings} modules × 100A`;
     const limitLabel = ulResult.isPortLimited
-      ? `Module capacity (${ulResult.moduleCapacity}A) &gt; Charge limit (${ulResult.chargeLimit}A) → <b>port-limited</b> → Charge Rate entered as-is, no derate.`
-      : `Module capacity (${ulResult.moduleCapacity}A) &lt; Charge limit (${ulResult.chargeLimit}A) → <b>module-limited</b> → entered as (module capacity − 5A).`;
+      ? `Capacity (${capTxt} = ${ulResult.moduleCapacity}A) &gt; Charge limit (${ulResult.chargeLimit}A) → <b>port-limited</b> → Charge Rate entered as-is, no derate.`
+      : `Capacity (${capTxt} = ${ulResult.moduleCapacity}A) &lt; Charge limit (${ulResult.chargeLimit}A) → <b>module-limited</b> → entered as (capacity − 5A).`;
     html += `<div class="confirm-box" style="border-color:var(--teal-dim); background:rgba(61,220,151,.06);"><div class="cb-title" style="color:var(--teal);">UL — reference detail</div>
       <div class="cb-line"><b>ul_config = ${ulResult.code}</b> (Discharge limit ${ulResult.dischargeLimit}A / Charge limit ${ulResult.chargeLimit}A)${ulResult.note}.<br>${limitLabel}<br>Final cancurrent/max_current = <b>${ulResult.finalCurrent}A</b>.</div></div>`;
   }
